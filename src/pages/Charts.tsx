@@ -278,7 +278,7 @@ const ChartsPage: React.FC = () => {
         </div>
 
         <div className="history-section">
-          <h4>数値履歴</h4>
+          <h4 className="sticky-header">記録</h4>
           <div className="history-list">
             {sortedHistory.map((item) => (
               <div 

@@ -291,6 +291,21 @@
   color: var(--text-secondary);
 }
 
+/* Sticky Header for History Section */
+.sticky-header {
+  position: sticky;
+  top: 0;
+  background: var(--bg-color);
+  padding: 8px 0;
+  z-index: 10;
+}
+
+/* Ensure history list scrolls within detail view */
+.detail-view .history-section {
+  max-height: 300px;
+  overflow-y: auto;
+}
+
 /* History List Section */
 .history-section {
   display: flex;

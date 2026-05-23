@@ -1,14 +1,17 @@
 .layout {
   display: flex;
   flex-direction: column;
-  min-height: 100vh;
+  height: 100vh;
+  height: 100dvh;
   width: 100%;
+  overflow: hidden;
 }
 
 .header {
   position: sticky;
   top: 0;
   height: 60px;
+  min-height: 60px;
   display: flex;
   align-items: center;
   padding: 0 20px;
@@ -27,9 +30,14 @@
 
 .content {
   flex: 1;
+  min-height: 0;
   padding: 20px;
   padding-bottom: calc(84px + var(--safe-area-bottom));
   max-width: 600px;
   margin: 0 auto;
   width: 100%;
+  overflow-y: auto;
+  overflow-x: hidden;
+  display: flex;
+  flex-direction: column;
 }

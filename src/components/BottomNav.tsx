@@ -11,7 +11,7 @@ const BottomNav: React.FC = () => {
       </NavLink>
       <NavLink to="/calendar" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
         <Calendar size={24} />
-        <span>履歴</span>
+        <span>記録</span>
       </NavLink>
       <NavLink to="/charts" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
         <BarChart2 size={24} />

@@ -39,6 +39,18 @@ const CalendarPage: React.FC = () => {
       initialMonths.push(d);
     }
     setMonthsToDisplay(initialMonths);
+
+    // カレンダーページでは.contentのスクロールを無効化し、
+    // カレンダー/リスト内部のスクロールのみを有効にする
+    const contentEl = document.querySelector('.content') as HTMLElement;
+    if (contentEl) {
+      contentEl.style.overflowY = 'hidden';
+    }
+    return () => {
+      if (contentEl) {
+        contentEl.style.overflowY = 'auto';
+      }
+    };
   }, []);
 
   const loadUniqueNames = async () => {
