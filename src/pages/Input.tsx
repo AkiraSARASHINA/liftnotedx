@@ -34,6 +34,8 @@ const InputPage: React.FC = () => {
   const [status, setStatus] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
   const [showPromptModal, setShowPromptModal] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [importedData, setImportedData] = useState<any | null>(null);
 
   const processWorkouts = async (data: any) => {
     const workouts = Array.isArray(data) ? data : [data];
@@ -78,12 +80,6 @@ const InputPage: React.FC = () => {
 
   // --- Backup / Restore Functions ---
 
-  const handleExportClipboard = async () => {
-    const all = await getAllWorkouts();
-    await navigator.clipboard.writeText(JSON.stringify(all, null, 2));
-    alert('全データをクリップボードにコピーしました。');
-  };
-
   const handleExportFile = async () => {
     const all = await getAllWorkouts();
     const blob = new Blob([JSON.stringify(all, null, 2)], { type: 'application/json' });
@@ -96,22 +92,37 @@ const InputPage: React.FC = () => {
     URL.revokeObjectURL(url);
   };
 
-  const handleImportFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
+    setSelectedFile(file);
+    setStatus(null);
+
     const reader = new FileReader();
-    reader.onload = async (event) => {
+    reader.onload = (event) => {
       try {
         const data = JSON.parse(event.target?.result as string);
-        const count = await processWorkouts(data);
-        setStatus({ type: 'success', message: `ファイルから${count}件の記録をインポートしました。` });
-        if (fileInputRef.current) fileInputRef.current.value = '';
+        setImportedData(data);
       } catch (err) {
+        setImportedData(null);
         setStatus({ type: 'error', message: 'ファイルの読み込みに失敗しました。正しい形式のJSONファイルを選択してください。' });
       }
     };
     reader.readAsText(file);
+  };
+
+  const handleImportExecute = async () => {
+    if (!importedData) return;
+    try {
+      const count = await processWorkouts(importedData);
+      setStatus({ type: 'success', message: `ファイルから${count}件の記録をインポートしました。` });
+      setSelectedFile(null);
+      setImportedData(null);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    } catch (err) {
+      setStatus({ type: 'error', message: 'インポートに失敗しました。データを確認してください。' });
+    }
   };
 
   return (
@@ -155,14 +166,9 @@ const InputPage: React.FC = () => {
         <div className="backup-actions">
           <div className="action-group">
             <label>エクスポート（書き出し）</label>
-            <div className="btn-row">
-              <button className="btn-secondary flex-1" onClick={handleExportClipboard}>
-                <Copy size={16} /> コピー
-              </button>
-              <button className="btn-secondary flex-1" onClick={handleExportFile}>
-                <Download size={16} /> ファイルをダウンロード
-              </button>
-            </div>
+            <button className="btn-secondary w-full" onClick={handleExportFile}>
+              <Download size={16} /> ファイルをダウンロード
+            </button>
           </div>
 
           <div className="action-group">
@@ -170,13 +176,40 @@ const InputPage: React.FC = () => {
             <input 
               type="file" 
               accept=".json" 
-              onChange={handleImportFile} 
+              onChange={handleFileChange} 
               ref={fileInputRef} 
               style={{ display: 'none' }} 
             />
             <button className="btn-secondary w-full" onClick={() => fileInputRef.current?.click()}>
-              <Upload size={16} /> バックアップを復元
+              <Upload size={16} /> ファイルをアップロード
             </button>
+
+            {selectedFile && (
+              <div className="selected-file-container animate-in">
+                <div className="file-info-row">
+                  <span className="file-name" title={selectedFile.name}>選択中: {selectedFile.name}</span>
+                  <button 
+                    className="cancel-file-btn" 
+                    onClick={() => {
+                      setSelectedFile(null);
+                      setImportedData(null);
+                      if (fileInputRef.current) fileInputRef.current.value = '';
+                      setStatus(null);
+                    }}
+                    title="選択を解除"
+                  >
+                    <X size={16} />
+                  </button>
+                </div>
+                <button 
+                  className="btn-primary import-exec-btn" 
+                  onClick={handleImportExecute}
+                  disabled={!importedData}
+                >
+                  インポートを実行
+                </button>
+              </div>
+            )}
           </div>
         </div>
       </div>

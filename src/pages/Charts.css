@@ -232,3 +232,138 @@
   from { opacity: 0; transform: translateY(20px); }
   to { opacity: 1; transform: translateY(0); }
 }
+
+/* Clickable Charts */
+.chart-section {
+  cursor: pointer;
+  transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
+}
+
+.chart-section:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
+  border-color: rgba(0, 163, 255, 0.3);
+}
+
+/* Detail View Layout */
+.detail-view-header {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 24px;
+}
+
+.back-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--surface-hover);
+  color: var(--text-primary);
+  border: 1px solid var(--border-color);
+  padding: 10px 16px;
+  border-radius: 12px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.back-btn:hover {
+  background: var(--border-color);
+  transform: translateX(-2px);
+}
+
+.detail-title-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.detail-title-info h2 {
+  font-size: 18px;
+  font-weight: 800;
+  margin: 0;
+  color: var(--text-primary);
+}
+
+.detail-title-info span {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+/* History List Section */
+.history-section {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 24px;
+}
+
+.history-section h4 {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text-secondary);
+  margin-bottom: 4px;
+  padding-left: 4px;
+}
+
+.history-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.history-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 14px 16px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.history-item:hover {
+  background: var(--surface-hover);
+  border-color: var(--primary-color);
+  transform: translateX(4px);
+}
+
+.history-date-col {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.history-date {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.history-dayofweek {
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+
+.history-value-col {
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
+}
+
+.history-value {
+  font-size: 20px;
+  font-weight: 800;
+  color: var(--primary-color);
+}
+
+.history-value.reps {
+  color: var(--secondary-color);
+}
+
+.history-unit {
+  font-size: 12px;
+  color: var(--text-secondary);
+  font-weight: 600;
+}
+

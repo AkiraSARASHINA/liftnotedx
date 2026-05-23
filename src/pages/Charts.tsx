@@ -3,7 +3,7 @@ import { getExercisesByName, getUniqueExerciseNames, getWorkoutByDate, type Exer
 import { 
   LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell 
 } from 'recharts';
-import { TrendingUp, Activity, RotateCcw, Info, Search, ChevronDown, X } from 'lucide-react';
+import { TrendingUp, Activity, RotateCcw, Info, Search, ChevronDown, X, ChevronLeft } from 'lucide-react';
 import './Charts.css';
 
 interface ChartDataPoint {
@@ -24,6 +24,7 @@ const ChartsPage: React.FC = () => {
   const [selectedWorkout, setSelectedWorkout] = useState<Workout | null>(null);
   const [showModal, setShowModal] = useState(false);
   const [activeDate, setActiveDate] = useState<string | null>(null);
+  const [activeDetailType, setActiveDetailType] = useState<'maxWeight' | 'volume' | 'reps' | null>(null);
 
   useEffect(() => {
     loadExerciseNames();
@@ -47,7 +48,10 @@ const ChartsPage: React.FC = () => {
   const loadExerciseNames = async () => {
     const names = await getUniqueExerciseNames();
     setExerciseNames(names);
-    if (names.length > 0 && !selectedName) {
+    const stored = sessionStorage.getItem('charts_selected_name');
+    if (stored && names.includes(stored)) {
+      setSelectedName(stored);
+    } else if (names.length > 0 && !selectedName) {
       setSelectedName(names[0]);
     }
   };
@@ -129,8 +133,10 @@ const ChartsPage: React.FC = () => {
 
   const selectExercise = (name: string) => {
     setSelectedName(name);
+    sessionStorage.setItem('charts_selected_name', name);
     setIsDropdownOpen(false);
     setSearchTerm('');
+    setActiveDetailType(null);
   };
 
   const getDayOfWeek = (dateStr: string) => {
@@ -156,159 +162,278 @@ const ChartsPage: React.FC = () => {
     return null;
   };
 
+  const renderDetailView = () => {
+    if (!activeDetailType || chartData.length === 0) return null;
+
+    let chartTitle = '';
+    let dataKey = '';
+    let unit = '';
+    let strokeColor = '';
+    let chartIcon = null;
+
+    if (activeDetailType === 'maxWeight') {
+      chartTitle = 'MAX重量';
+      dataKey = 'maxWeight';
+      unit = 'kg';
+      strokeColor = 'var(--primary-color)';
+      chartIcon = <TrendingUp size={20} />;
+    } else if (activeDetailType === 'volume') {
+      chartTitle = '総ボリューム';
+      dataKey = 'volume';
+      unit = 'kg';
+      strokeColor = 'rgba(0, 163, 255, 0.6)';
+      chartIcon = <Activity size={20} />;
+    } else if (activeDetailType === 'reps') {
+      chartTitle = '総レップ数';
+      dataKey = 'reps';
+      unit = '回';
+      strokeColor = 'rgba(255, 0, 85, 0.6)';
+      chartIcon = <RotateCcw size={20} />;
+    }
+
+    const sortedHistory = [...chartData].sort((a, b) => b.date.localeCompare(a.date));
+
+    return (
+      <div className="detail-view animate-in">
+        <div className="detail-view-header">
+          <button className="back-btn" onClick={() => setActiveDetailType(null)}>
+            <ChevronLeft size={18} />
+            戻る
+          </button>
+          <div className="detail-title-info">
+            <h2>{chartTitle}詳細</h2>
+            <span>{selectedName}</span>
+          </div>
+        </div>
+
+        <div className="chart-section card">
+          <div className="chart-header">
+            {chartIcon}
+            <h3>{chartTitle}推移 ({unit})</h3>
+          </div>
+          <div className="chart-container">
+            <ResponsiveContainer width="100%" height={320}>
+              {activeDetailType === 'maxWeight' ? (
+                <LineChart 
+                  data={chartData} 
+                  onClick={handlePointClick} 
+                  onMouseMove={handleChartMouseMove}
+                  onMouseLeave={() => setActiveDate(null)}
+                  margin={{ top: 10, right: 10, left: -20, bottom: 20 }}
+                >
+                  <CartesianGrid strokeDasharray="3 3" stroke="#2a2a2a" vertical={false} />
+                  <XAxis dataKey="date" stroke="#a0a0a0" fontSize={10} tickLine={false} />
+                  <YAxis stroke="#a0a0a0" fontSize={12} domain={['dataMin - 5', 'dataMax + 5']} />
+                  <Tooltip 
+                    content={<CustomTooltip />} 
+                    wrapperStyle={{ pointerEvents: 'none' }}
+                    active={activeDate !== null}
+                  />
+                  <Line 
+                    type="monotone" 
+                    dataKey={dataKey} 
+                    name={chartTitle} 
+                    unit={unit} 
+                    stroke={strokeColor} 
+                    strokeWidth={3}
+                    dot={{ r: 6, fill: strokeColor, strokeWidth: 0, cursor: 'pointer' }}
+                    activeDot={{ r: 8, strokeWidth: 0, cursor: 'pointer' }}
+                  />
+                </LineChart>
+              ) : (
+                <BarChart 
+                  data={chartData} 
+                  onClick={handlePointClick} 
+                  onMouseMove={handleChartMouseMove}
+                  onMouseLeave={() => setActiveDate(null)}
+                  margin={{ top: 10, right: 10, left: -20, bottom: 20 }}
+                >
+                  <CartesianGrid strokeDasharray="3 3" stroke="#2a2a2a" vertical={false} />
+                  <XAxis dataKey="date" stroke="#a0a0a0" fontSize={10} tickLine={false} />
+                  <YAxis stroke="#a0a0a0" fontSize={12} />
+                  <Tooltip 
+                    content={<CustomTooltip />} 
+                    wrapperStyle={{ pointerEvents: 'none' }}
+                    active={activeDate !== null}
+                  />
+                  <Bar 
+                    dataKey={dataKey} 
+                    name={chartTitle} 
+                    unit={unit} 
+                    fill={strokeColor} 
+                    radius={[6, 6, 0, 0]} 
+                    cursor="pointer"
+                  >
+                    {chartData.map((entry, index) => (
+                      <Cell 
+                        key={`cell-${index}`} 
+                        fill={activeDate === entry.date ? 'var(--primary-color)' : strokeColor} 
+                      />
+                    ))}
+                  </Bar>
+                </BarChart>
+              )}
+            </ResponsiveContainer>
+          </div>
+        </div>
+
+        <div className="history-section">
+          <h4>数値履歴</h4>
+          <div className="history-list">
+            {sortedHistory.map((item) => (
+              <div 
+                key={item.date} 
+                className="history-item card animate-in"
+                onClick={() => handlePointClick({ date: item.date })}
+              >
+                <div className="history-date-col">
+                  <span className="history-date">{item.date}</span>
+                  <span className="history-dayofweek">({getDayOfWeek(item.date)}曜日)</span>
+                </div>
+                <div className="history-value-col">
+                  <span className={`history-value ${activeDetailType === 'reps' ? 'reps' : ''}`}>
+                    {item[dataKey as keyof ChartDataPoint] as number}
+                  </span>
+                  <span className="history-unit">{unit}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    );
+  };
+
   return (
     <div className="charts-page">
-      <div className="exercise-selector card">
-        <label>種目を選択</label>
-        <div className="custom-select-container">
-          <div 
-            className="custom-select-trigger" 
-            onClick={() => setIsDropdownOpen(!isDropdownOpen)}
-          >
-            <span className={selectedName ? 'selected-val' : 'placeholder'}>
-              {selectedName || '種目を選択してください'}
-            </span>
-            <ChevronDown size={18} className={isDropdownOpen ? 'rotate' : ''} />
+      {activeDetailType === null ? (
+        <>
+          <div className="exercise-selector card">
+            <label>種目を選択</label>
+            <div className="custom-select-container">
+              <div 
+                className="custom-select-trigger" 
+                onClick={() => setIsDropdownOpen(!isDropdownOpen)}
+              >
+                <span className={selectedName ? 'selected-val' : 'placeholder'}>
+                  {selectedName || '種目を選択してください'}
+                </span>
+                <ChevronDown size={18} className={isDropdownOpen ? 'rotate' : ''} />
+              </div>
+
+              {isDropdownOpen && (
+                <div className="custom-dropdown glass animate-in">
+                  <div className="search-box">
+                    <Search size={16} />
+                    <input 
+                      type="text" 
+                      placeholder="種目名で検索..." 
+                      value={searchTerm}
+                      onChange={(e) => setSearchTerm(e.target.value)}
+                      autoFocus
+                      onClick={e => e.stopPropagation()}
+                    />
+                  </div>
+                  <div className="options-list">
+                    {filteredNames.length > 0 ? (
+                      filteredNames.map(name => (
+                        <div 
+                          key={name} 
+                          className={`option ${name === selectedName ? 'active' : ''}`}
+                          onClick={() => selectExercise(name)}
+                        >
+                          {name}
+                        </div>
+                      ))
+                    ) : (
+                      <div className="no-results">該当する種目がありません</div>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
 
-          {isDropdownOpen && (
-            <div className="custom-dropdown glass animate-in">
-              <div className="search-box">
-                <Search size={16} />
-                <input 
-                  type="text" 
-                  placeholder="種目名で検索..." 
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  autoFocus
-                  onClick={e => e.stopPropagation()}
-                />
+          {!isBodyweight && chartData.length > 0 && (
+            <div className="chart-section card" onClick={() => setActiveDetailType('maxWeight')}>
+              <div className="chart-header">
+                <TrendingUp size={18} />
+                <h3>MAX重量推移 (kg)</h3>
               </div>
-              <div className="options-list">
-                {filteredNames.length > 0 ? (
-                  filteredNames.map(name => (
-                    <div 
-                      key={name} 
-                      className={`option ${name === selectedName ? 'active' : ''}`}
-                      onClick={() => selectExercise(name)}
-                    >
-                      {name}
-                    </div>
-                  ))
-                ) : (
-                  <div className="no-results">該当する種目がありません</div>
-                )}
+              <div className="chart-container" style={{ pointerEvents: 'none' }}>
+                <ResponsiveContainer width="100%" height={220}>
+                  <LineChart 
+                    data={chartData} 
+                    margin={{ top: 10, right: 10, left: -20, bottom: 0 }}
+                  >
+                    <CartesianGrid strokeDasharray="3 3" stroke="#2a2a2a" vertical={false} />
+                    <XAxis dataKey="date" hide />
+                    <YAxis stroke="#a0a0a0" fontSize={12} domain={['dataMin - 5', 'dataMax + 5']} />
+                    <Line 
+                      type="monotone" 
+                      dataKey="maxWeight" 
+                      stroke="var(--primary-color)" 
+                      strokeWidth={3}
+                      dot={{ r: 4, fill: 'var(--primary-color)', strokeWidth: 0 }}
+                    />
+                  </LineChart>
+                </ResponsiveContainer>
               </div>
             </div>
           )}
-        </div>
-      </div>
 
-      {!isBodyweight && chartData.length > 0 && (
-        <div className="chart-section card">
-          <div className="chart-header">
-            <TrendingUp size={18} />
-            <h3>MAX重量推移 (kg)</h3>
-          </div>
-          <div className="chart-container">
-            <ResponsiveContainer width="100%" height={220}>
-              <LineChart 
-                data={chartData} 
-                onClick={handlePointClick} 
-                onMouseMove={handleChartMouseMove}
-                onMouseLeave={() => setActiveDate(null)}
-                margin={{ top: 10, right: 10, left: -20, bottom: 0 }}
-              >
-                <CartesianGrid strokeDasharray="3 3" stroke="#2a2a2a" vertical={false} />
-                <XAxis dataKey="date" hide />
-                <YAxis stroke="#a0a0a0" fontSize={12} domain={['dataMin - 5', 'dataMax + 5']} />
-                <Tooltip 
-                  content={<CustomTooltip />} 
-                  wrapperStyle={{ pointerEvents: 'none' }}
-                  active={activeDate !== null}
-                />
-                <Line 
-                  type="monotone" 
-                  dataKey="maxWeight" 
-                  name="MAX重量" 
-                  unit="kg" 
-                  stroke="var(--primary-color)" 
-                  strokeWidth={3}
-                  dot={{ r: 6, fill: 'var(--primary-color)', strokeWidth: 0, cursor: 'pointer' }}
-                  activeDot={{ r: 8, strokeWidth: 0, cursor: 'pointer' }}
-                />
-              </LineChart>
-            </ResponsiveContainer>
-          </div>
-        </div>
-      )}
+          {!isBodyweight && chartData.length > 0 && (
+            <div className="chart-section card" onClick={() => setActiveDetailType('volume')}>
+              <div className="chart-header">
+                <Activity size={18} />
+                <h3>総ボリューム (kg)</h3>
+              </div>
+              <div className="chart-container" style={{ pointerEvents: 'none' }}>
+                <ResponsiveContainer width="100%" height={220}>
+                  <BarChart 
+                    data={chartData} 
+                    margin={{ top: 10, right: 10, left: -20, bottom: 0 }}
+                  >
+                    <CartesianGrid strokeDasharray="3 3" stroke="#2a2a2a" vertical={false} />
+                    <XAxis dataKey="date" hide />
+                    <YAxis stroke="#a0a0a0" fontSize={12} />
+                    <Bar dataKey="volume" fill="rgba(0, 163, 255, 0.4)" radius={[4, 4, 0, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+          )}
 
-      {!isBodyweight && chartData.length > 0 && (
-        <div className="chart-section card">
-          <div className="chart-header">
-            <Activity size={18} />
-            <h3>総ボリューム (kg)</h3>
-          </div>
-          <div className="chart-container">
-            <ResponsiveContainer width="100%" height={220}>
-              <BarChart 
-                data={chartData} 
-                onClick={handlePointClick} 
-                onMouseMove={handleChartMouseMove}
-                onMouseLeave={() => setActiveDate(null)}
-                margin={{ top: 10, right: 10, left: -20, bottom: 0 }}
-              >
-                <CartesianGrid strokeDasharray="3 3" stroke="#2a2a2a" vertical={false} />
-                <XAxis dataKey="date" hide />
-                <YAxis stroke="#a0a0a0" fontSize={12} />
-                <Tooltip 
-                  content={<CustomTooltip />} 
-                  wrapperStyle={{ pointerEvents: 'none' }}
-                  active={activeDate !== null}
-                />
-                <Bar dataKey="volume" name="ボリューム" unit="kg" fill="rgba(0, 163, 255, 0.4)" radius={[4, 4, 0, 0]} cursor="pointer">
-                  {chartData.map((entry, index) => (
-                    <Cell key={`cell-${index}`} fill={activeDate === entry.date ? 'var(--primary-color)' : 'rgba(0, 163, 255, 0.4)'} />
-                  ))}
-                </Bar>
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-        </div>
-      )}
+          {chartData.length > 0 && (
+            <div className="chart-section card" onClick={() => setActiveDetailType('reps')}>
+              <div className="chart-header">
+                <RotateCcw size={18} />
+                <h3>総レップ数</h3>
+              </div>
+              <div className="chart-container" style={{ pointerEvents: 'none' }}>
+                <ResponsiveContainer width="100%" height={220}>
+                  <BarChart 
+                    data={chartData} 
+                    margin={{ top: 10, right: 10, left: -20, bottom: 0 }}
+                  >
+                    <CartesianGrid strokeDasharray="3 3" stroke="#2a2a2a" vertical={false} />
+                    <XAxis dataKey="date" hide />
+                    <YAxis stroke="#a0a0a0" fontSize={12} />
+                    <Bar dataKey="reps" fill="rgba(255, 0, 85, 0.4)" radius={[4, 4, 0, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+          )}
 
-      {chartData.length > 0 && (
-        <div className="chart-section card">
-          <div className="chart-header">
-            <RotateCcw size={18} />
-            <h3>総レップ数</h3>
-          </div>
-          <div className="chart-container">
-            <ResponsiveContainer width="100%" height={220}>
-              <BarChart 
-                data={chartData} 
-                onClick={handlePointClick} 
-                onMouseMove={handleChartMouseMove}
-                onMouseLeave={() => setActiveDate(null)}
-                margin={{ top: 10, right: 10, left: -20, bottom: 0 }}
-              >
-                <CartesianGrid strokeDasharray="3 3" stroke="#2a2a2a" vertical={false} />
-                <XAxis dataKey="date" hide />
-                <YAxis stroke="#a0a0a0" fontSize={12} />
-                <Tooltip 
-                  content={<CustomTooltip />} 
-                  wrapperStyle={{ pointerEvents: 'none' }}
-                  active={activeDate !== null}
-                />
-                <Bar dataKey="reps" name="レップ数" unit="回" fill="rgba(255, 0, 85, 0.4)" radius={[4, 4, 0, 0]} cursor="pointer">
-                  {chartData.map((entry, index) => (
-                    <Cell key={`cell-${index}`} fill={activeDate === entry.date ? 'var(--secondary-color)' : 'rgba(255, 0, 85, 0.4)'} />
-                  ))}
-                </Bar>
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-        </div>
+          {chartData.length === 0 && selectedName && (
+            <div className="no-data card">
+              <p>データがありません。</p>
+            </div>
+          )}
+        </>
+      ) : (
+        renderDetailView()
       )}
 
       {showModal && selectedWorkout && (
@@ -342,12 +467,6 @@ const ChartsPage: React.FC = () => {
               ))}
             </div>
           </div>
-        </div>
-      )}
-
-      {chartData.length === 0 && selectedName && (
-        <div className="no-data card">
-          <p>データがありません。</p>
         </div>
       )}
     </div>

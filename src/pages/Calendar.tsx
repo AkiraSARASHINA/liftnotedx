@@ -25,13 +25,15 @@ const CalendarPage: React.FC = () => {
   const [monthsToDisplay, setMonthsToDisplay] = useState<Date[]>([]);
   const [uniqueNames, setUniqueNames] = useState<string[]>([]);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const listScrollContainerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     loadWorkouts();
     loadUniqueNames();
     const initialMonths = [];
+    const baseDate = new Date();
     for (let i = 5; i >= 0; i--) {
-      const d = new Date();
+      const d = new Date(baseDate);
       d.setDate(1);
       d.setMonth(d.getMonth() - i);
       initialMonths.push(d);
@@ -44,15 +46,26 @@ const CalendarPage: React.FC = () => {
     setUniqueNames(names);
   };
 
-  useLayoutEffect(() => {
-    if (viewMode === 'grid' && scrollContainerRef.current) {
-      scrollContainerRef.current.scrollTop = scrollContainerRef.current.scrollHeight;
-    }
-  }, [viewMode, monthsToDisplay.length === 6]);
-
   const loadWorkouts = async () => {
     const all = await getAllWorkouts();
     setAllWorkouts(all);
+
+    if (all.length > 0) {
+      const sorted = [...all].sort((a, b) => b.date.localeCompare(a.date));
+      const latestDateStr = sorted[0].date;
+      const [year, month, day] = latestDateStr.split('-').map(Number);
+      const baseDate = new Date(year, month - 1, day);
+
+      const initialMonths = [];
+      for (let i = 5; i >= 0; i--) {
+        const d = new Date(baseDate);
+        d.setDate(1);
+        d.setMonth(d.getMonth() - i);
+        initialMonths.push(d);
+      }
+      setMonthsToDisplay(initialMonths);
+    }
+
     // Refresh selected workout if modal is open
     if (selectedDateStr) {
       const updated = await getWorkoutByDate(selectedDateStr);
@@ -69,8 +82,16 @@ const CalendarPage: React.FC = () => {
   }, [allWorkouts]);
 
   const sortedWorkouts = useMemo(() => {
-    return [...allWorkouts].sort((a, b) => b.date.localeCompare(a.date));
+    return [...allWorkouts].sort((a, b) => a.date.localeCompare(b.date));
   }, [allWorkouts]);
+
+  useLayoutEffect(() => {
+    if (viewMode === 'grid' && scrollContainerRef.current) {
+      scrollContainerRef.current.scrollTop = scrollContainerRef.current.scrollHeight;
+    } else if (viewMode === 'list' && listScrollContainerRef.current) {
+      listScrollContainerRef.current.scrollTop = listScrollContainerRef.current.scrollHeight;
+    }
+  }, [viewMode, monthsToDisplay[monthsToDisplay.length - 1]?.getTime(), sortedWorkouts.length]);
 
   const handleDateClick = async (dateStr: string) => {
     const workout = await getWorkoutByDate(dateStr);
@@ -336,12 +357,12 @@ const CalendarPage: React.FC = () => {
           {monthsToDisplay.map(m => renderMonthGrid(m))}
         </div>
       ) : (
-        <div className="timeline-list animate-in">
+        <div className="timeline-list animate-in" ref={listScrollContainerRef}>
           {sortedWorkouts.map((w) => (
             <div key={w.date} className="timeline-item card" onClick={() => handleDateClick(w.date)}>
               <div className="timeline-date">
-                <span className="date-main">{w.date.split('-')[2]}</span>
-                <span className="date-sub">{w.date.split('-')[0]}.{w.date.split('-')[1]} ({getDayOfWeek(w.date)})</span>
+                <span className="date-main">{parseInt(w.date.split('-')[1], 10)}/{parseInt(w.date.split('-')[2], 10)}</span>
+                <span className="date-sub">{w.date.split('-')[0]} ({getDayOfWeek(w.date)})</span>
               </div>
               <div className="timeline-summary">
                 <div className="exercise-chips">
