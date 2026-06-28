@@ -1,8 +1,21 @@
+import { useState, useEffect } from 'react';
 import { initDB } from '../lib/db';
-import { Trash2, ShieldAlert, Info } from 'lucide-react';
+import { Trash2, ShieldAlert, Info, Sliders } from 'lucide-react';
 import './Settings.css';
 
 const SettingsPage: React.FC = () => {
+  const [highlightPB, setHighlightPB] = useState<boolean>(false);
+
+  useEffect(() => {
+    const stored = localStorage.getItem('settings_highlight_pb');
+    setHighlightPB(stored === 'true');
+  }, []);
+
+  const handleToggleHighlightPB = (checked: boolean) => {
+    setHighlightPB(checked);
+    localStorage.setItem('settings_highlight_pb', String(checked));
+  };
+
   const handleClearAllData = async () => {
     // Step 1 Confirmation
     const confirm1 = window.confirm(
@@ -42,6 +55,29 @@ const SettingsPage: React.FC = () => {
         <p className="about-text">
           LiftNote DX をご利用いただきありがとうございます。このアプリはブラウザ内のローカルストレージにデータを保存しているため、サーバーにデータが送信されることはありません。
         </p>
+      </section>
+
+      <section className="settings-section card">
+        <div className="section-header">
+          <Sliders size={20} />
+          <h3>表示設定</h3>
+        </div>
+        <div className="settings-options">
+          <div className="setting-item">
+            <div className="setting-info">
+              <span className="setting-title">過去最高記録のハイライト</span>
+              <span className="setting-desc">分析詳細画面で、過去最高を更新した日の記録をハイライトします。</span>
+            </div>
+            <label className="toggle-switch">
+              <input 
+                type="checkbox" 
+                checked={highlightPB} 
+                onChange={(e) => handleToggleHighlightPB(e.target.checked)} 
+              />
+              <span className="slider"></span>
+            </label>
+          </div>
+        </div>
       </section>
 
       <section className="settings-section card danger-zone">

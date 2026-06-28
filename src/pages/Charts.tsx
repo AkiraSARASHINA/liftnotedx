@@ -191,6 +191,22 @@ const ChartsPage: React.FC = () => {
       chartIcon = <RotateCcw size={20} />;
     }
 
+    const showPBHighlight = localStorage.getItem('settings_highlight_pb') === 'true';
+
+    // 過去最高の更新日付を古い順から計算
+    const pbDates = new Set<string>();
+    if (showPBHighlight) {
+      const chronologicalData = [...chartData].sort((a, b) => a.date.localeCompare(b.date));
+      let currentMax = 0; // 0より大きい値を記録
+      chronologicalData.forEach(item => {
+        const val = item[dataKey as keyof ChartDataPoint] as number;
+        if (val > currentMax) {
+          pbDates.add(item.date);
+          currentMax = val;
+        }
+      });
+    }
+
     const sortedHistory = [...chartData].sort((a, b) => b.date.localeCompare(a.date));
 
     return (
@@ -236,8 +252,22 @@ const ChartsPage: React.FC = () => {
                     unit={unit} 
                     stroke={strokeColor} 
                     strokeWidth={3}
-                    dot={{ r: 6, fill: strokeColor, strokeWidth: 0, cursor: 'pointer' }}
                     activeDot={{ r: 8, strokeWidth: 0, cursor: 'pointer' }}
+                    dot={(dotProps: any) => {
+                      const { cx, cy, payload } = dotProps;
+                      const isPB = pbDates.has(payload.date);
+                      if (isPB) {
+                        return (
+                          <g key={`dot-${payload.date}`}>
+                            <circle cx={cx} cy={cy} r={8} fill="#ff9900" stroke="#fff" strokeWidth={2} style={{ cursor: 'pointer' }} />
+                            <circle cx={cx} cy={cy} r={12} fill="none" stroke="#ff5500" strokeWidth={1.5} opacity={0.6} style={{ cursor: 'pointer', transformOrigin: `${cx}px ${cy}px`, animation: 'pulse 2s infinite' }} />
+                          </g>
+                        );
+                      }
+                      return (
+                        <circle key={`dot-${payload.date}`} cx={cx} cy={cy} r={5} fill={strokeColor} strokeWidth={0} style={{ cursor: 'pointer' }} />
+                      );
+                    }}
                   />
                 </LineChart>
               ) : (
@@ -264,12 +294,21 @@ const ChartsPage: React.FC = () => {
                     radius={[6, 6, 0, 0]} 
                     cursor="pointer"
                   >
-                    {chartData.map((entry, index) => (
-                      <Cell 
-                        key={`cell-${index}`} 
-                        fill={activeDate === entry.date ? 'var(--primary-color)' : strokeColor} 
-                      />
-                    ))}
+                    {chartData.map((entry, index) => {
+                      const isPB = pbDates.has(entry.date);
+                      let cellColor = strokeColor;
+                      if (activeDate === entry.date) {
+                        cellColor = 'var(--primary-color)';
+                      } else if (isPB) {
+                        cellColor = '#ff9900'; // PBハイライトカラー
+                      }
+                      return (
+                        <Cell 
+                          key={`cell-${index}`} 
+                          fill={cellColor} 
+                        />
+                      );
+                    })}
                   </Bar>
                 </BarChart>
               )}
@@ -280,24 +319,30 @@ const ChartsPage: React.FC = () => {
         <div className="history-section">
           <h4 className="sticky-header">記録</h4>
           <div className="history-list">
-            {sortedHistory.map((item) => (
-              <div 
-                key={item.date} 
-                className="history-item card animate-in"
-                onClick={() => handlePointClick({ date: item.date })}
-              >
-                <div className="history-date-col">
-                  <span className="history-date">{item.date}</span>
-                  <span className="history-dayofweek">({getDayOfWeek(item.date)}曜日)</span>
+            {sortedHistory.map((item) => {
+              const isPB = pbDates.has(item.date);
+              return (
+                <div 
+                  key={item.date} 
+                  className={`history-item card animate-in ${isPB ? 'pb-highlight' : ''}`}
+                  onClick={() => handlePointClick({ date: item.date })}
+                >
+                  <div className="history-date-col">
+                    <div className="history-date-row">
+                      <span className="history-date">{item.date}</span>
+                      {isPB && <span className="pb-badge">最高記録🔥</span>}
+                    </div>
+                    <span className="history-dayofweek">({getDayOfWeek(item.date)}曜日)</span>
+                  </div>
+                  <div className="history-value-col">
+                    <span className={`history-value ${activeDetailType === 'reps' ? 'reps' : ''} ${isPB ? 'pb-text' : ''}`}>
+                      {item[dataKey as keyof ChartDataPoint] as number}
+                    </span>
+                    <span className="history-unit">{unit}</span>
+                  </div>
                 </div>
-                <div className="history-value-col">
-                  <span className={`history-value ${activeDetailType === 'reps' ? 'reps' : ''}`}>
-                    {item[dataKey as keyof ChartDataPoint] as number}
-                  </span>
-                  <span className="history-unit">{unit}</span>
-                </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </div>
       </div>

@@ -366,6 +366,43 @@
   gap: 4px;
 }
 
+.history-date-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.pb-badge {
+  font-size: 10px;
+  font-weight: 800;
+  color: #fff;
+  background: linear-gradient(135deg, #ff9900 0%, #ff5500 100%);
+  padding: 2px 6px;
+  border-radius: 6px;
+  box-shadow: 0 2px 6px rgba(255, 85, 0, 0.4);
+  animation: pulse 2s infinite ease-in-out;
+}
+
+.pb-highlight {
+  border-color: rgba(255, 153, 0, 0.4) !important;
+  background: linear-gradient(90deg, rgba(255, 153, 0, 0.05) 0%, rgba(255, 85, 0, 0.02) 100%);
+}
+
+.pb-highlight:hover {
+  border-color: #ff9900 !important;
+}
+
+.pb-text {
+  color: #ff9900 !important;
+  text-shadow: 0 0 10px rgba(255, 153, 0, 0.3);
+}
+
+@keyframes pulse {
+  0% { transform: scale(1); }
+  50% { transform: scale(1.05); }
+  100% { transform: scale(1); }
+}
+
 .history-value {
   font-size: 20px;
   font-weight: 800;
