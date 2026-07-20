@@ -3,7 +3,7 @@ import { getExercisesByName, getUniqueExerciseNames, getWorkoutByDate, type Exer
 import { 
   LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell 
 } from 'recharts';
-import { TrendingUp, Activity, RotateCcw, Info, Search, ChevronDown, X, ChevronLeft, Maximize2, List, BarChart2 } from 'lucide-react';
+import { TrendingUp, Activity, RotateCcw, Info, Search, ChevronDown, X, ChevronLeft, Maximize2, List } from 'lucide-react';
 import './Charts.css';
 
 interface ChartDataPoint {
@@ -255,7 +255,9 @@ const ChartsPage: React.FC = () => {
                 dot={(dotProps: any) => {
                   const { cx, cy, payload } = dotProps;
                   const isPB = pbDates.has(payload.date);
-                  if (isPB) {
+                  // 設定がオン、または最高記録のみフィルターがオンの時にハイライト
+                  const shouldHighlight = isPB && (showPBHighlight || onlyShowPB);
+                  if (shouldHighlight) {
                     return (
                       <g key={`dot-${payload.date}`}>
                         <circle cx={cx} cy={cy} r={8} fill="#ff9900" stroke="#fff" strokeWidth={2} style={{ cursor: 'pointer' }} />
@@ -295,10 +297,11 @@ const ChartsPage: React.FC = () => {
               >
                 {displayChartData.map((entry, index) => {
                   const isPB = pbDates.has(entry.date);
+                  const shouldHighlight = isPB && (showPBHighlight || onlyShowPB);
                   let cellColor = strokeColor;
                   if (activeDate === entry.date) {
                     cellColor = 'var(--primary-color)';
-                  } else if (isPB) {
+                  } else if (shouldHighlight) {
                     cellColor = '#ff9900';
                   }
                   return (
@@ -319,21 +322,22 @@ const ChartsPage: React.FC = () => {
       <div className="history-list">
         {items.map((item) => {
           const isPB = pbDates.has(item.date);
+          const shouldHighlight = isPB && (showPBHighlight || onlyShowPB);
           return (
             <div 
               key={item.date} 
-              className={`history-item card animate-in ${isPB ? 'pb-highlight' : ''}`}
+              className={`history-item card animate-in ${shouldHighlight ? 'pb-highlight' : ''}`}
               onClick={() => handlePointClick({ date: item.date })}
             >
               <div className="history-date-col">
                 <div className="history-date-row">
                   <span className="history-date">{item.date}</span>
-                  {isPB && <span className="pb-badge">最高記録🔥</span>}
+                  {shouldHighlight && <span className="pb-badge">最高記録🔥</span>}
                 </div>
                 <span className="history-dayofweek">({getDayOfWeek(item.date)}曜日)</span>
               </div>
               <div className="history-value-col">
-                <span className={`history-value ${activeDetailType === 'reps' ? 'reps' : ''} ${isPB ? 'pb-text' : ''}`}>
+                <span className={`history-value ${activeDetailType === 'reps' ? 'reps' : ''} ${shouldHighlight ? 'pb-text' : ''}`}>
                   {item[dataKey as keyof ChartDataPoint] as number}
                 </span>
                 <span className="history-unit">{unit}</span>
