@@ -419,3 +419,146 @@
   font-weight: 600;
 }
 
+/* Subview improvements */
+.chart-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+}
+
+.chart-header-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.section-header-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+  padding: 0 4px;
+}
+
+.section-header-row .sticky-header {
+  margin: 0;
+  padding: 0;
+  background: transparent;
+  position: static;
+}
+
+.icon-btn-text {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--border-color);
+  color: var(--text-secondary);
+  padding: 8px 12px;
+  border-radius: 10px;
+  font-size: 12px;
+  font-weight: 600;
+  transition: all 0.2s ease;
+}
+
+.icon-btn-text:hover {
+  background: var(--surface-hover);
+  color: var(--primary-color);
+  border-color: rgba(0, 163, 255, 0.3);
+}
+
+.icon-btn-text:active {
+  transform: scale(0.96);
+}
+
+/* Full history view layout */
+.detail-view .full-history-section {
+  max-height: calc(100vh - 180px);
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+.full-history-section .sticky-header {
+  position: sticky;
+  top: 0;
+  background: var(--bg-color);
+  padding: 10px 0 10px 4px;
+  z-index: 10;
+  margin: 0;
+}
+
+/* Full height chart card adjustments */
+.full-height-chart {
+  padding: 24px;
+}
+
+/* Small filter toggle switch */
+.pb-filter-container {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: rgba(255, 153, 0, 0.05);
+  border: 1px solid rgba(255, 153, 0, 0.2);
+  padding: 6px 12px;
+  border-radius: 20px;
+}
+
+.pb-filter-label {
+  font-size: 11px;
+  font-weight: 700;
+  color: #ff9900;
+}
+
+.toggle-switch-sm {
+  position: relative;
+  display: inline-block;
+  width: 36px;
+  height: 20px;
+  flex-shrink: 0;
+}
+
+.toggle-switch-sm input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.slider-sm {
+  position: absolute;
+  cursor: pointer;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: var(--border-color);
+  transition: .3s;
+  border-radius: 20px;
+}
+
+.slider-sm:before {
+  position: absolute;
+  content: "";
+  height: 14px;
+  width: 14px;
+  left: 3px;
+  bottom: 3px;
+  background-color: white;
+  transition: .3s;
+  border-radius: 50%;
+}
+
+.toggle-switch-sm input:checked + .slider-sm {
+  background-color: #ff9900;
+}
+
+.toggle-switch-sm input:checked + .slider-sm:before {
+  transform: translateX(16px);
+}
+
+.full-history-header {
+  align-items: center;
+}
+
+
+

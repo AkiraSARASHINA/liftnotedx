@@ -3,7 +3,7 @@ import { getExercisesByName, getUniqueExerciseNames, getWorkoutByDate, type Exer
 import { 
   LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell 
 } from 'recharts';
-import { TrendingUp, Activity, RotateCcw, Info, Search, ChevronDown, X, ChevronLeft } from 'lucide-react';
+import { TrendingUp, Activity, RotateCcw, Info, Search, ChevronDown, X, ChevronLeft, Maximize2, List, BarChart2 } from 'lucide-react';
 import './Charts.css';
 
 interface ChartDataPoint {
@@ -25,6 +25,8 @@ const ChartsPage: React.FC = () => {
   const [showModal, setShowModal] = useState(false);
   const [activeDate, setActiveDate] = useState<string | null>(null);
   const [activeDetailType, setActiveDetailType] = useState<'maxWeight' | 'volume' | 'reps' | null>(null);
+  const [detailSubView, setDetailSubView] = useState<'summary' | 'chart_only' | 'history_only'>('summary');
+  const [onlyShowPB, setOnlyShowPB] = useState<boolean>(false);
 
   useEffect(() => {
     loadExerciseNames();
@@ -137,6 +139,8 @@ const ChartsPage: React.FC = () => {
     setIsDropdownOpen(false);
     setSearchTerm('');
     setActiveDetailType(null);
+    setDetailSubView('summary');
+    setOnlyShowPB(false);
   };
 
   const getDayOfWeek = (dateStr: string) => {
@@ -191,160 +195,257 @@ const ChartsPage: React.FC = () => {
       chartIcon = <RotateCcw size={20} />;
     }
 
-    const showPBHighlight = localStorage.getItem('settings_highlight_pb') === 'true';
-
-    // 過去最高の更新日付を古い順から計算
+    // 過去最高の更新日付を古い順から計算（フィルターとハイライトで使用するため常に計算）
     const pbDates = new Set<string>();
-    if (showPBHighlight) {
-      const chronologicalData = [...chartData].sort((a, b) => a.date.localeCompare(b.date));
-      let currentMax = 0; // 0より大きい値を記録
-      chronologicalData.forEach(item => {
-        const val = item[dataKey as keyof ChartDataPoint] as number;
-        if (val > currentMax) {
-          pbDates.add(item.date);
-          currentMax = val;
-        }
-      });
-    }
+    const chronologicalData = [...chartData].sort((a, b) => a.date.localeCompare(b.date));
+    let currentMax = 0; // 0より大きい値を記録
+    chronologicalData.forEach(item => {
+      const val = item[dataKey as keyof ChartDataPoint] as number;
+      if (val > currentMax) {
+        pbDates.add(item.date);
+        currentMax = val;
+      }
+    });
 
+    const showPBHighlight = localStorage.getItem('settings_highlight_pb') === 'true';
     const sortedHistory = [...chartData].sort((a, b) => b.date.localeCompare(a.date));
+    const recentHistory = sortedHistory.slice(0, 5);
+
+    const handleBackClick = () => {
+      setOnlyShowPB(false);
+      if (detailSubView === 'summary') {
+        setActiveDetailType(null);
+      } else {
+        setDetailSubView('summary');
+      }
+    };
+
+    // フィルター適用後のチャートデータ
+    const displayChartData = onlyShowPB
+      ? chartData.filter(item => pbDates.has(item.date))
+      : chartData;
+
+    const renderChartSection = (height: number) => (
+      <div className="chart-container">
+        <ResponsiveContainer width="100%" height={height}>
+          {activeDetailType === 'maxWeight' ? (
+            <LineChart 
+              data={displayChartData} 
+              onClick={handlePointClick} 
+              onMouseMove={handleChartMouseMove}
+              onMouseLeave={() => setActiveDate(null)}
+              margin={{ top: 10, right: 10, left: -20, bottom: 20 }}
+            >
+              <CartesianGrid strokeDasharray="3 3" stroke="#2a2a2a" vertical={false} />
+              <XAxis dataKey="date" stroke="#a0a0a0" fontSize={10} tickLine={false} />
+              <YAxis stroke="#a0a0a0" fontSize={12} domain={['dataMin - 5', 'dataMax + 5']} />
+              <Tooltip 
+                content={<CustomTooltip />} 
+                wrapperStyle={{ pointerEvents: 'none' }}
+                active={activeDate !== null}
+              />
+              <Line 
+                type="monotone" 
+                dataKey={dataKey} 
+                name={chartTitle} 
+                unit={unit} 
+                stroke={strokeColor} 
+                strokeWidth={3}
+                activeDot={{ r: 8, strokeWidth: 0, cursor: 'pointer' }}
+                dot={(dotProps: any) => {
+                  const { cx, cy, payload } = dotProps;
+                  const isPB = pbDates.has(payload.date);
+                  if (isPB) {
+                    return (
+                      <g key={`dot-${payload.date}`}>
+                        <circle cx={cx} cy={cy} r={8} fill="#ff9900" stroke="#fff" strokeWidth={2} style={{ cursor: 'pointer' }} />
+                        <circle cx={cx} cy={cy} r={12} fill="none" stroke="#ff5500" strokeWidth={1.5} opacity={0.6} style={{ cursor: 'pointer', transformOrigin: `${cx}px ${cy}px`, animation: 'pulse 2s infinite' }} />
+                      </g>
+                    );
+                  }
+                  return (
+                    <circle key={`dot-${payload.date}`} cx={cx} cy={cy} r={5} fill={strokeColor} strokeWidth={0} style={{ cursor: 'pointer' }} />
+                  );
+                }}
+              />
+            </LineChart>
+          ) : (
+            <BarChart 
+              data={displayChartData} 
+              onClick={handlePointClick} 
+              onMouseMove={handleChartMouseMove}
+              onMouseLeave={() => setActiveDate(null)}
+              margin={{ top: 10, right: 10, left: -20, bottom: 20 }}
+            >
+              <CartesianGrid strokeDasharray="3 3" stroke="#2a2a2a" vertical={false} />
+              <XAxis dataKey="date" stroke="#a0a0a0" fontSize={10} tickLine={false} />
+              <YAxis stroke="#a0a0a0" fontSize={12} />
+              <Tooltip 
+                content={<CustomTooltip />} 
+                wrapperStyle={{ pointerEvents: 'none' }}
+                active={activeDate !== null}
+              />
+              <Bar 
+                dataKey={dataKey} 
+                name={chartTitle} 
+                unit={unit} 
+                fill={strokeColor} 
+                radius={[6, 6, 0, 0]} 
+                cursor="pointer"
+              >
+                {displayChartData.map((entry, index) => {
+                  const isPB = pbDates.has(entry.date);
+                  let cellColor = strokeColor;
+                  if (activeDate === entry.date) {
+                    cellColor = 'var(--primary-color)';
+                  } else if (isPB) {
+                    cellColor = '#ff9900';
+                  }
+                  return (
+                    <Cell 
+                      key={`cell-${index}`} 
+                      fill={cellColor} 
+                    />
+                  );
+                })}
+              </Bar>
+            </BarChart>
+          )}
+        </ResponsiveContainer>
+      </div>
+    );
+
+    const renderHistoryItems = (items: ChartDataPoint[]) => (
+      <div className="history-list">
+        {items.map((item) => {
+          const isPB = pbDates.has(item.date);
+          return (
+            <div 
+              key={item.date} 
+              className={`history-item card animate-in ${isPB ? 'pb-highlight' : ''}`}
+              onClick={() => handlePointClick({ date: item.date })}
+            >
+              <div className="history-date-col">
+                <div className="history-date-row">
+                  <span className="history-date">{item.date}</span>
+                  {isPB && <span className="pb-badge">最高記録🔥</span>}
+                </div>
+                <span className="history-dayofweek">({getDayOfWeek(item.date)}曜日)</span>
+              </div>
+              <div className="history-value-col">
+                <span className={`history-value ${activeDetailType === 'reps' ? 'reps' : ''} ${isPB ? 'pb-text' : ''}`}>
+                  {item[dataKey as keyof ChartDataPoint] as number}
+                </span>
+                <span className="history-unit">{unit}</span>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    );
+
+    const renderFilterToggle = () => (
+      <div className="pb-filter-container">
+        <span className="pb-filter-label">最高記録のみ表示🔥</span>
+        <label className="toggle-switch-sm">
+          <input 
+            type="checkbox" 
+            checked={onlyShowPB} 
+            onChange={(e) => setOnlyShowPB(e.target.checked)} 
+          />
+          <span className="slider-sm"></span>
+        </label>
+      </div>
+    );
 
     return (
       <div className="detail-view animate-in">
         <div className="detail-view-header">
-          <button className="back-btn" onClick={() => setActiveDetailType(null)}>
+          <button className="back-btn" onClick={handleBackClick}>
             <ChevronLeft size={18} />
             戻る
           </button>
           <div className="detail-title-info">
-            <h2>{chartTitle}詳細</h2>
+            <h2>
+              {chartTitle}
+              {detailSubView === 'chart_only' && '（グラフ詳細）'}
+              {detailSubView === 'history_only' && '（全記録）'}
+              {detailSubView === 'summary' && '（概要）'}
+            </h2>
             <span>{selectedName}</span>
           </div>
         </div>
 
-        <div className="chart-section card">
-          <div className="chart-header">
-            {chartIcon}
-            <h3>{chartTitle}推移 ({unit})</h3>
-          </div>
-          <div className="chart-container">
-            <ResponsiveContainer width="100%" height={320}>
-              {activeDetailType === 'maxWeight' ? (
-                <LineChart 
-                  data={chartData} 
-                  onClick={handlePointClick} 
-                  onMouseMove={handleChartMouseMove}
-                  onMouseLeave={() => setActiveDate(null)}
-                  margin={{ top: 10, right: 10, left: -20, bottom: 20 }}
-                >
-                  <CartesianGrid strokeDasharray="3 3" stroke="#2a2a2a" vertical={false} />
-                  <XAxis dataKey="date" stroke="#a0a0a0" fontSize={10} tickLine={false} />
-                  <YAxis stroke="#a0a0a0" fontSize={12} domain={['dataMin - 5', 'dataMax + 5']} />
-                  <Tooltip 
-                    content={<CustomTooltip />} 
-                    wrapperStyle={{ pointerEvents: 'none' }}
-                    active={activeDate !== null}
-                  />
-                  <Line 
-                    type="monotone" 
-                    dataKey={dataKey} 
-                    name={chartTitle} 
-                    unit={unit} 
-                    stroke={strokeColor} 
-                    strokeWidth={3}
-                    activeDot={{ r: 8, strokeWidth: 0, cursor: 'pointer' }}
-                    dot={(dotProps: any) => {
-                      const { cx, cy, payload } = dotProps;
-                      const isPB = pbDates.has(payload.date);
-                      if (isPB) {
-                        return (
-                          <g key={`dot-${payload.date}`}>
-                            <circle cx={cx} cy={cy} r={8} fill="#ff9900" stroke="#fff" strokeWidth={2} style={{ cursor: 'pointer' }} />
-                            <circle cx={cx} cy={cy} r={12} fill="none" stroke="#ff5500" strokeWidth={1.5} opacity={0.6} style={{ cursor: 'pointer', transformOrigin: `${cx}px ${cy}px`, animation: 'pulse 2s infinite' }} />
-                          </g>
-                        );
-                      }
-                      return (
-                        <circle key={`dot-${payload.date}`} cx={cx} cy={cy} r={5} fill={strokeColor} strokeWidth={0} style={{ cursor: 'pointer' }} />
-                      );
-                    }}
-                  />
-                </LineChart>
-              ) : (
-                <BarChart 
-                  data={chartData} 
-                  onClick={handlePointClick} 
-                  onMouseMove={handleChartMouseMove}
-                  onMouseLeave={() => setActiveDate(null)}
-                  margin={{ top: 10, right: 10, left: -20, bottom: 20 }}
-                >
-                  <CartesianGrid strokeDasharray="3 3" stroke="#2a2a2a" vertical={false} />
-                  <XAxis dataKey="date" stroke="#a0a0a0" fontSize={10} tickLine={false} />
-                  <YAxis stroke="#a0a0a0" fontSize={12} />
-                  <Tooltip 
-                    content={<CustomTooltip />} 
-                    wrapperStyle={{ pointerEvents: 'none' }}
-                    active={activeDate !== null}
-                  />
-                  <Bar 
-                    dataKey={dataKey} 
-                    name={chartTitle} 
-                    unit={unit} 
-                    fill={strokeColor} 
-                    radius={[6, 6, 0, 0]} 
-                    cursor="pointer"
-                  >
-                    {chartData.map((entry, index) => {
-                      const isPB = pbDates.has(entry.date);
-                      let cellColor = strokeColor;
-                      if (activeDate === entry.date) {
-                        cellColor = 'var(--primary-color)';
-                      } else if (isPB) {
-                        cellColor = '#ff9900'; // PBハイライトカラー
-                      }
-                      return (
-                        <Cell 
-                          key={`cell-${index}`} 
-                          fill={cellColor} 
-                        />
-                      );
-                    })}
-                  </Bar>
-                </BarChart>
-              )}
-            </ResponsiveContainer>
-          </div>
-        </div>
-
-        <div className="history-section">
-          <h4 className="sticky-header">記録</h4>
-          <div className="history-list">
-            {sortedHistory.map((item) => {
-              const isPB = pbDates.has(item.date);
-              return (
-                <div 
-                  key={item.date} 
-                  className={`history-item card animate-in ${isPB ? 'pb-highlight' : ''}`}
-                  onClick={() => handlePointClick({ date: item.date })}
-                >
-                  <div className="history-date-col">
-                    <div className="history-date-row">
-                      <span className="history-date">{item.date}</span>
-                      {isPB && <span className="pb-badge">最高記録🔥</span>}
-                    </div>
-                    <span className="history-dayofweek">({getDayOfWeek(item.date)}曜日)</span>
-                  </div>
-                  <div className="history-value-col">
-                    <span className={`history-value ${activeDetailType === 'reps' ? 'reps' : ''} ${isPB ? 'pb-text' : ''}`}>
-                      {item[dataKey as keyof ChartDataPoint] as number}
-                    </span>
-                    <span className="history-unit">{unit}</span>
-                  </div>
+        {detailSubView === 'summary' && (
+          <div className="subview-summary-container">
+            {/* グラフ概要カード */}
+            <div className="chart-section card">
+              <div className="chart-header">
+                <div className="chart-header-title">
+                  {chartIcon}
+                  <h3>{chartTitle}推移 ({unit})</h3>
                 </div>
-              );
-            })}
+                <button 
+                  className="icon-btn-text" 
+                  onClick={() => setDetailSubView('chart_only')}
+                  title="グラフを拡大"
+                >
+                  <Maximize2 size={16} />
+                  <span>拡大する</span>
+                </button>
+              </div>
+              {renderChartSection(220)}
+            </div>
+
+            {/* 直近の記録セクション */}
+            <div className="history-section">
+              <div className="section-header-row">
+                <h4 className="sticky-header">直近の記録</h4>
+                <button 
+                  className="icon-btn-text" 
+                  onClick={() => setDetailSubView('history_only')}
+                >
+                  <List size={16} />
+                  <span>すべての記録を表示 ({sortedHistory.length}件)</span>
+                </button>
+              </div>
+              {renderHistoryItems(recentHistory)}
+            </div>
           </div>
-        </div>
+        )}
+
+        {detailSubView === 'chart_only' && (
+          <div className="subview-chart-only-container animate-in">
+            <div className="chart-section card full-height-chart">
+              <div className="chart-header">
+                <div className="chart-header-title">
+                  {chartIcon}
+                  <h3>{chartTitle}詳細推移 ({unit})</h3>
+                </div>
+                {renderFilterToggle()}
+              </div>
+              {renderChartSection(400)}
+            </div>
+          </div>
+        )}
+
+        {detailSubView === 'history_only' && (
+          <div className="subview-history-only-container animate-in">
+            <div className="history-section full-history-section">
+              <div className="section-header-row full-history-header">
+                <h4 className="sticky-header">
+                  {onlyShowPB ? `最高記録のみ (${sortedHistory.filter(item => pbDates.has(item.date)).length}件)` : `全記録 (${sortedHistory.length}件)`}
+                </h4>
+                {renderFilterToggle()}
+              </div>
+              {renderHistoryItems(
+                onlyShowPB
+                  ? sortedHistory.filter(item => pbDates.has(item.date))
+                  : sortedHistory
+              )}
+            </div>
+          </div>
+        )}
       </div>
     );
   };
