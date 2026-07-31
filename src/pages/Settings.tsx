@@ -1,19 +1,30 @@
 import { useState, useEffect } from 'react';
 import { initDB } from '../lib/db';
-import { Trash2, ShieldAlert, Info, Sliders } from 'lucide-react';
+import { Trash2, ShieldAlert, Info, Sliders, Moon, Sun } from 'lucide-react';
 import './Settings.css';
 
 const SettingsPage: React.FC = () => {
   const [highlightPB, setHighlightPB] = useState<boolean>(false);
+  const [theme, setTheme] = useState<'dark' | 'light'>('dark');
 
   useEffect(() => {
     const stored = localStorage.getItem('settings_highlight_pb');
     setHighlightPB(stored === 'true');
+
+    const storedTheme = (localStorage.getItem('app_theme') as 'dark' | 'light') || 'dark';
+    setTheme(storedTheme);
   }, []);
 
   const handleToggleHighlightPB = (checked: boolean) => {
     setHighlightPB(checked);
     localStorage.setItem('settings_highlight_pb', String(checked));
+  };
+
+  const handleToggleTheme = (isDark: boolean) => {
+    const newTheme = isDark ? 'dark' : 'light';
+    setTheme(newTheme);
+    localStorage.setItem('app_theme', newTheme);
+    document.documentElement.setAttribute('data-theme', newTheme);
   };
 
   const handleClearAllData = async () => {
@@ -63,6 +74,24 @@ const SettingsPage: React.FC = () => {
           <h3>表示設定</h3>
         </div>
         <div className="settings-options">
+          <div className="setting-item">
+            <div className="setting-info">
+              <span className="setting-title-with-icon">
+                {theme === 'dark' ? <Moon size={16} /> : <Sun size={16} />}
+                <span>ダークモード</span>
+              </span>
+              <span className="setting-desc">アプリのテーマをダーク/ライトで切り替えます。</span>
+            </div>
+            <label className="toggle-switch">
+              <input 
+                type="checkbox" 
+                checked={theme === 'dark'} 
+                onChange={(e) => handleToggleTheme(e.target.checked)} 
+              />
+              <span className="slider"></span>
+            </label>
+          </div>
+
           <div className="setting-item">
             <div className="setting-info">
               <span className="setting-title">過去最高記録のハイライト</span>
