@@ -8,6 +8,7 @@ import './Charts.css';
 
 interface ChartDataPoint {
   date: string;
+  timestamp: number;
   maxWeight: number;
   volume: number;
   reps: number;
@@ -72,15 +73,18 @@ const ChartsPage: React.FC = () => {
       const volume = ex.sets.reduce((sum, s) => sum + (s.weight || 0) * s.reps, 0);
       const reps = ex.sets.reduce((sum, s) => sum + s.reps, 0);
       
+      const timestamp = new Date(r.date + 'T00:00:00').getTime();
+
       return {
         date: r.date,
+        timestamp,
         maxWeight,
         volume,
         reps,
         isBodyweight: ex.isBodyweight,
         exerciseDetail: ex
       };
-    });
+    }).sort((a, b) => a.timestamp - b.timestamp);
     setChartData(data);
     setSelectedWorkout(null);
     setActiveDate(null);
@@ -105,8 +109,6 @@ const ChartsPage: React.FC = () => {
       dateStr = data.payload.date;
     } else if (data?.date) {
       dateStr = data.date;
-    } else if (data?.activeLabel) {
-      dateStr = data.activeLabel;
     }
     
     if (dateStr) {
@@ -122,8 +124,8 @@ const ChartsPage: React.FC = () => {
   };
 
   const handleChartMouseMove = (state: any) => {
-    if (state && state.activeLabel) {
-      setActiveDate(state.activeLabel);
+    if (state && state.activePayload && state.activePayload[0]) {
+      setActiveDate(state.activePayload[0].payload.date);
     }
   };
 
@@ -149,12 +151,12 @@ const ChartsPage: React.FC = () => {
     return days[d.getDay()];
   };
 
-  const CustomTooltip = ({ active, payload, label }: any) => {
-    // Only show if activeDate matches this label or Recharts thinks it's active
-    if (active && payload && payload.length && (label === activeDate)) {
+  const CustomTooltip = ({ active, payload }: any) => {
+    if (active && payload && payload.length) {
+      const itemData = payload[0].payload;
       return (
         <div className="custom-tooltip glass">
-          <p className="label">{label}</p>
+          <p className="label">{itemData.date}</p>
           {payload.map((p: any, i: number) => (
             <p key={i} className="value" style={{ color: p.color }}>
               {p.name}: {p.value}{p.unit}
@@ -237,7 +239,19 @@ const ChartsPage: React.FC = () => {
               margin={{ top: 10, right: 10, left: -20, bottom: 20 }}
             >
               <CartesianGrid strokeDasharray="3 3" stroke="#2a2a2a" vertical={false} />
-              <XAxis dataKey="date" stroke="#a0a0a0" fontSize={10} tickLine={false} />
+              <XAxis 
+                dataKey="timestamp" 
+                type="number"
+                scale="time"
+                domain={['dataMin', 'dataMax']}
+                stroke="#a0a0a0" 
+                fontSize={10} 
+                tickLine={false}
+                tickFormatter={(time: number) => {
+                  const d = new Date(time);
+                  return `${d.getMonth() + 1}/${d.getDate()}`;
+                }}
+              />
               <YAxis stroke="#a0a0a0" fontSize={12} domain={['dataMin - 5', 'dataMax + 5']} />
               <Tooltip 
                 content={<CustomTooltip />} 
@@ -280,7 +294,19 @@ const ChartsPage: React.FC = () => {
               margin={{ top: 10, right: 10, left: -20, bottom: 20 }}
             >
               <CartesianGrid strokeDasharray="3 3" stroke="#2a2a2a" vertical={false} />
-              <XAxis dataKey="date" stroke="#a0a0a0" fontSize={10} tickLine={false} />
+              <XAxis 
+                dataKey="timestamp" 
+                type="number"
+                scale="time"
+                domain={['dataMin', 'dataMax']}
+                stroke="#a0a0a0" 
+                fontSize={10} 
+                tickLine={false}
+                tickFormatter={(time: number) => {
+                  const d = new Date(time);
+                  return `${d.getMonth() + 1}/${d.getDate()}`;
+                }}
+              />
               <YAxis stroke="#a0a0a0" fontSize={12} />
               <Tooltip 
                 content={<CustomTooltip />} 
@@ -294,6 +320,7 @@ const ChartsPage: React.FC = () => {
                 fill={strokeColor} 
                 radius={[6, 6, 0, 0]} 
                 cursor="pointer"
+                barSize={16}
               >
                 {displayChartData.map((entry, index) => {
                   const isPB = pbDates.has(entry.date);
@@ -517,7 +544,7 @@ const ChartsPage: React.FC = () => {
                     margin={{ top: 10, right: 10, left: -20, bottom: 0 }}
                   >
                     <CartesianGrid strokeDasharray="3 3" stroke="#2a2a2a" vertical={false} />
-                    <XAxis dataKey="date" hide />
+                    <XAxis dataKey="timestamp" type="number" scale="time" domain={['dataMin', 'dataMax']} hide />
                     <YAxis stroke="#a0a0a0" fontSize={12} domain={['dataMin - 5', 'dataMax + 5']} />
                     <Line 
                       type="monotone" 
@@ -545,9 +572,9 @@ const ChartsPage: React.FC = () => {
                     margin={{ top: 10, right: 10, left: -20, bottom: 0 }}
                   >
                     <CartesianGrid strokeDasharray="3 3" stroke="#2a2a2a" vertical={false} />
-                    <XAxis dataKey="date" hide />
+                    <XAxis dataKey="timestamp" type="number" scale="time" domain={['dataMin', 'dataMax']} hide />
                     <YAxis stroke="#a0a0a0" fontSize={12} />
-                    <Bar dataKey="volume" fill="rgba(0, 163, 255, 0.4)" radius={[4, 4, 0, 0]} />
+                    <Bar dataKey="volume" fill="rgba(0, 163, 255, 0.4)" radius={[4, 4, 0, 0]} barSize={16} />
                   </BarChart>
                 </ResponsiveContainer>
               </div>
@@ -567,9 +594,9 @@ const ChartsPage: React.FC = () => {
                     margin={{ top: 10, right: 10, left: -20, bottom: 0 }}
                   >
                     <CartesianGrid strokeDasharray="3 3" stroke="#2a2a2a" vertical={false} />
-                    <XAxis dataKey="date" hide />
+                    <XAxis dataKey="timestamp" type="number" scale="time" domain={['dataMin', 'dataMax']} hide />
                     <YAxis stroke="#a0a0a0" fontSize={12} />
-                    <Bar dataKey="reps" fill="rgba(255, 0, 85, 0.4)" radius={[4, 4, 0, 0]} />
+                    <Bar dataKey="reps" fill="rgba(255, 0, 85, 0.4)" radius={[4, 4, 0, 0]} barSize={16} />
                   </BarChart>
                 </ResponsiveContainer>
               </div>
