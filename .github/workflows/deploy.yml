@@ -4,12 +4,21 @@ on:
   push:
     branches:
       - main # main ブランチに push されたときに起動
+  workflow_dispatch: # 手動実行も可能に
 
+# GitHub Pages への直接デプロイに必要な権限を設定
 permissions:
-  contents: write # gh-pages ブランチへの書き込み権限
+  contents: read
+  pages: write
+  id-token: write
+
+# 二重実行時のバッティングを防ぎ、最新のコミットのビルドを優先する
+concurrency:
+  group: 'pages'
+  cancel-in-progress: true
 
 jobs:
-  build-and-deploy:
+  build:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -30,9 +39,20 @@ jobs:
         env:
           VITE_GOOGLE_CLIENT_ID: ${{ secrets.VITE_GOOGLE_CLIENT_ID }}
 
-      # ビルド成果物 (dist) を gh-pages ブランチにデプロイ
-      - name: Deploy to GitHub Pages
-        uses: JamesIves/github-pages-deploy-action@v4
+      # ビルド成果物 (dist) を一時的な Pages アーティファクトとしてアップロード
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
         with:
-          folder: dist
-          branch: gh-pages
+          path: dist
+
+  deploy:
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      # アップロードしたアーティファクトを GitHub Pages に直接デプロイ
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
