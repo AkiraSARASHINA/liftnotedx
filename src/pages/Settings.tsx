@@ -1,11 +1,41 @@
 import { useState, useEffect } from 'react';
 import { initDB } from '../lib/db';
-import { Trash2, ShieldAlert, Info, Sliders, Moon, Sun } from 'lucide-react';
+import { 
+  Trash2, 
+  ShieldAlert, 
+  Info, 
+  Sliders, 
+  Moon, 
+  Sun, 
+  Cloud, 
+  CloudOff, 
+  RefreshCw, 
+  AlertTriangle,
+  Check
+} from 'lucide-react';
+import { 
+  linkGoogleDrive, 
+  unlinkGoogleDrive, 
+  restoreDataFromCloud, 
+  isLinked, 
+  isAutoUploadEnabled, 
+  setAutoUploadEnabled, 
+  addStatusListener,
+  hasClientId,
+  uploadLocalDataToCloud
+} from '../lib/googleDriveSync';
 import './Settings.css';
 
 const SettingsPage: React.FC = () => {
   const [highlightPB, setHighlightPB] = useState<boolean>(false);
   const [theme, setTheme] = useState<'dark' | 'light'>('dark');
+  
+  // Sync state
+  const [syncStatus, setSyncStatus] = useState<string>('unlinked');
+  const [syncMessage, setSyncMessage] = useState<string>('');
+  const [autoUpload, setAutoUpload] = useState<boolean>(true);
+  const [lastSync, setLastSync] = useState<string | null>(null);
+  const [hasConfiguredClient, setHasConfiguredClient] = useState<boolean>(true);
 
   useEffect(() => {
     const stored = localStorage.getItem('settings_highlight_pb');
@@ -13,6 +43,26 @@ const SettingsPage: React.FC = () => {
 
     const storedTheme = (localStorage.getItem('app_theme') as 'dark' | 'light') || 'dark';
     setTheme(storedTheme);
+
+    // Initial state check
+    setAutoUpload(isAutoUploadEnabled());
+    setLastSync(localStorage.getItem('gdrive_last_sync'));
+    setHasConfiguredClient(hasClientId());
+
+    // Subscribe to sync status changes
+    const unsubscribe = addStatusListener((status, message) => {
+      setSyncStatus(status);
+      setSyncMessage(message || '');
+      
+      // Update last sync if it changed
+      if (status === 'linked') {
+        setLastSync(localStorage.getItem('gdrive_last_sync'));
+      }
+    });
+
+    return () => {
+      unsubscribe();
+    };
   }, []);
 
   const handleToggleHighlightPB = (checked: boolean) => {
@@ -25,6 +75,50 @@ const SettingsPage: React.FC = () => {
     setTheme(newTheme);
     localStorage.setItem('app_theme', newTheme);
     document.documentElement.setAttribute('data-theme', newTheme);
+  };
+
+  const handleToggleAutoUpload = (checked: boolean) => {
+    setAutoUpload(checked);
+    setAutoUploadEnabled(checked);
+  };
+
+  const handleLink = async () => {
+    try {
+      await linkGoogleDrive();
+    } catch (e) {
+      console.error('Failed to link Google Drive:', e);
+    }
+  };
+
+  const handleUnlink = () => {
+    if (window.confirm('Google Driveとの連携を解除します。クラウド上のバックアップデータは削除されません。よろしいですか？')) {
+      unlinkGoogleDrive();
+    }
+  };
+
+  const handleUploadNow = async () => {
+    try {
+      await uploadLocalDataToCloud();
+    } catch (e: any) {
+      alert(`アップロードに失敗しました: ${e.message}`);
+    }
+  };
+
+  const handleRestore = async () => {
+    const confirm1 = window.confirm(
+      '【重要】クラウド上のバックアップデータから端末の全データを復元します。\nローカルの既存データはクラウド上のデータで上書き（またはマージ）されます。よろしいですか？'
+    );
+    if (!confirm1) return;
+
+    try {
+      const count = await restoreDataFromCloud();
+      if (count > 0) {
+        alert(`${count}件の記録を復元しました。最新のデータを反映するため、アプリを再起動（リロード）します。`);
+        window.location.reload();
+      }
+    } catch (e: any) {
+      alert(`復元に失敗しました: ${e.message}`);
+    }
   };
 
   const handleClearAllData = async () => {
@@ -54,6 +148,54 @@ const SettingsPage: React.FC = () => {
       console.error('Failed to clear data:', error);
       alert('データの削除中にエラーが発生しました。');
     }
+  };
+
+  // Format date helper
+  const formatSyncTime = (isoString: string | null) => {
+    if (!isoString) return 'なし';
+    try {
+      const date = new Date(isoString);
+      return date.toLocaleString('ja-JP', {
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit'
+      });
+    } catch (e) {
+      return isoString;
+    }
+  };
+
+  // Render status badge
+  const renderStatusBadge = () => {
+    if (syncStatus === 'linked') {
+      return (
+        <span className="sync-status-badge linked">
+          <Check size={12} /> 連携中
+        </span>
+      );
+    }
+    if (syncStatus === 'linking' || syncStatus === 'syncing') {
+      return (
+        <span className="sync-status-badge linked animate-pulse">
+          同期中
+        </span>
+      );
+    }
+    if (syncStatus === 'error') {
+      return (
+        <span className="sync-status-badge error" title={syncMessage}>
+          エラー
+        </span>
+      );
+    }
+    return (
+      <span className="sync-status-badge unlinked">
+        <CloudOff size={12} /> 未連携
+      </span>
+    );
   };
 
   return (
@@ -107,6 +249,80 @@ const SettingsPage: React.FC = () => {
             </label>
           </div>
         </div>
+      </section>
+
+      {/* Google Drive Synchronization Settings Section */}
+      <section className="settings-section card">
+        <div className="section-header">
+          <Cloud size={20} />
+          <h3>外部バックアップ設定</h3>
+        </div>
+        
+        {!hasConfiguredClient && (
+          <div className="client-id-warning">
+            <AlertTriangle size={18} style={{ flexShrink: 0 }} />
+            <div>
+              Google OAuthクライアントIDが設定されていません。
+              ローカル開発の場合は <code>.env</code> ファイルに <code>VITE_GOOGLE_CLIENT_ID</code> を設定してください。
+            </div>
+          </div>
+        )}
+
+        <div className="sync-status-row">
+          <span className="sync-status-label">連携状態</span>
+          {renderStatusBadge()}
+        </div>
+
+        {syncMessage && syncStatus === 'error' && (
+          <p className="section-desc" style={{ color: 'var(--secondary-color)', marginTop: '-4px' }}>
+            {syncMessage}
+          </p>
+        )}
+
+        {isLinked() ? (
+          <div className="settings-options">
+            <div className="setting-item">
+              <div className="setting-info">
+                <span className="setting-title">自動バックアップ</span>
+                <span className="setting-desc">記録の保存・削除時に、クラウドへ自動でアップロードします。</span>
+              </div>
+              <label className="toggle-switch">
+                <input 
+                  type="checkbox" 
+                  checked={autoUpload} 
+                  onChange={(e) => handleToggleAutoUpload(e.target.checked)} 
+                />
+                <span className="slider"></span>
+              </label>
+            </div>
+
+            <div className="sync-meta-info">
+              <div>クラウド上のファイル: <code>liftnote_dx_backup.json</code></div>
+              <div>最終同期日時: <strong>{formatSyncTime(lastSync)}</strong></div>
+            </div>
+
+            <div className="sync-btn-container">
+              <button className="btn-sync-action link" onClick={handleUploadNow}>
+                <RefreshCw size={16} /> 今すぐバックアップを保存
+              </button>
+              <button className="btn-sync-action restore" onClick={handleRestore}>
+                データをクラウドから復元
+              </button>
+              <button className="btn-sync-action unlink" onClick={handleUnlink}>
+                Google Driveとの連携を解除
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div className="sync-btn-container">
+            <p className="about-text" style={{ fontSize: '13px', marginBottom: '8px' }}>
+              Google アカウントと連携すると、アプリ専用のプライベートフォルダ（アプリ以外からはアクセスできない安全な隠し領域）にバックアップを保存し、別端末から簡単にデータを復元できます。
+            </p>
+            <button className="btn-sync-action link" onClick={handleLink} disabled={!hasConfiguredClient}>
+              Google Driveと連携する
+            </button>
+          </div>
+        )}
       </section>
 
       <section className="settings-section card danger-zone">

@@ -166,7 +166,8 @@ const CalendarPage: React.FC = () => {
       // Manual add to a day that doesn't have a record yet
       const newWorkout: Workout = {
         date: selectedDateStr,
-        exercises: [editForm]
+        exercises: [editForm],
+        updatedAt: '', // saveWorkout 内で自動設定される
       };
       await saveWorkout(newWorkout);
     } else {

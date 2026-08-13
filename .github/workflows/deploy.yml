@@ -2,40 +2,37 @@ name: Deploy to GitHub Pages
 
 on:
   push:
-    branches: [ main ]
+    branches:
+      - main # main ブランチに push されたときに起動
 
 permissions:
-  contents: read
-  pages: write
-  id-token: write
+  contents: write # gh-pages ブランチへの書き込み権限
 
 jobs:
-  build:
+  build-and-deploy:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Set up Node
+      - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: 20
           cache: 'npm'
 
       - name: Install dependencies
-        run: npm install
+        run: npm ci
 
+      # ビルド時に GitHub Secrets からクライアントIDを環境変数として注入します
       - name: Build
         run: npm run build
+        env:
+          VITE_GOOGLE_CLIENT_ID: ${{ secrets.VITE_GOOGLE_CLIENT_ID }}
 
-      - name: Setup Pages
-        uses: actions/configure-pages@v4
-
-      - name: Upload artifact
-        uses: actions/upload-pages-artifact@v3
-        with:
-          path: './dist'
-
+      # ビルド成果物 (dist) を gh-pages ブランチにデプロイ
       - name: Deploy to GitHub Pages
-        id: deployment
-        uses: actions/deploy-pages@v4
+        uses: JamesIves/github-pages-deploy-action@v4
+        with:
+          folder: dist
+          branch: gh-pages

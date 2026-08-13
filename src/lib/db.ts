@@ -15,6 +15,7 @@ export interface Exercise {
 export interface Workout {
   date: string; // YYYY-MM-DD
   exercises: Exercise[];
+  updatedAt: string; // ISO 8601
 }
 
 interface LiftNoteDXDB extends DBSchema {
@@ -26,27 +27,59 @@ interface LiftNoteDXDB extends DBSchema {
 }
 
 const DB_NAME = 'lift-note-dx-db';
-const DB_VERSION = 1;
+const DB_VERSION = 2;
 
 let dbPromise: Promise<IDBPDatabase<LiftNoteDXDB>>;
 
 export const initDB = () => {
   if (!dbPromise) {
     dbPromise = openDB<LiftNoteDXDB>(DB_NAME, DB_VERSION, {
-      upgrade(db) {
-        const store = db.createObjectStore('workouts', {
-          keyPath: 'date',
-        });
-        store.createIndex('by-date', 'date');
+      upgrade(db, oldVersion, _newVersion, transaction) {
+        if (oldVersion < 1) {
+          const store = db.createObjectStore('workouts', {
+            keyPath: 'date',
+          });
+          store.createIndex('by-date', 'date');
+        }
+        if (oldVersion < 2) {
+          // v1→v2: 既存の全ワークアウトに updatedAt を付与
+          const store = transaction.objectStore('workouts');
+          store.getAll().then(workouts => {
+            const now = new Date().toISOString();
+            for (const workout of workouts) {
+              store.put({ ...workout, updatedAt: now });
+            }
+          });
+        }
       },
     });
   }
   return dbPromise;
 };
 
+type DBChangeListener = () => void;
+const dbListeners = new Set<DBChangeListener>();
+
+export const addDBChangeListener = (listener: DBChangeListener) => {
+  dbListeners.add(listener);
+  return () => {
+    dbListeners.delete(listener);
+  };
+};
+
+const notifyDBChange = () => {
+  dbListeners.forEach(listener => listener());
+};
+
 export const saveWorkout = async (workout: Workout) => {
   const db = await initDB();
-  return db.put('workouts', workout);
+  const workoutWithTimestamp: Workout = {
+    ...workout,
+    updatedAt: new Date().toISOString(),
+  };
+  const result = await db.put('workouts', workoutWithTimestamp);
+  notifyDBChange();
+  return result;
 };
 
 export const getWorkoutByDate = async (date: string) => {
@@ -61,7 +94,9 @@ export const getAllWorkouts = async () => {
 
 export const deleteWorkout = async (date: string) => {
   const db = await initDB();
-  return db.delete('workouts', date);
+  const result = await db.delete('workouts', date);
+  notifyDBChange();
+  return result;
 };
 
 

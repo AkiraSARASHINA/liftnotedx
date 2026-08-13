@@ -160,3 +160,117 @@ input:checked + .slider:before {
   color: var(--text-secondary);
   opacity: 0.5;
 }
+
+/* Google Drive Sync Section Styles */
+.sync-status-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-bottom: 1px solid var(--border-color);
+  padding-bottom: 12px;
+  margin-bottom: 12px;
+}
+
+.sync-status-label {
+  font-size: 14px;
+  color: var(--text-secondary);
+}
+
+.sync-status-badge {
+  font-size: 12px;
+  font-weight: 700;
+  padding: 4px 10px;
+  border-radius: 20px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.sync-status-badge.unlinked {
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--text-secondary);
+  border: 1px solid var(--border-color);
+}
+
+.sync-status-badge.linked {
+  background: rgba(0, 163, 255, 0.1);
+  color: var(--primary-color);
+  border: 1px solid rgba(0, 163, 255, 0.2);
+}
+
+.sync-status-badge.error {
+  background: rgba(255, 0, 85, 0.1);
+  color: var(--secondary-color);
+  border: 1px solid rgba(255, 0, 85, 0.2);
+}
+
+.client-id-warning {
+  background: rgba(255, 170, 0, 0.1);
+  border: 1px solid rgba(255, 170, 0, 0.2);
+  color: #ffaa00;
+  border-radius: 12px;
+  padding: 12px;
+  font-size: 12px;
+  line-height: 1.5;
+  display: flex;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.sync-meta-info {
+  font-size: 12px;
+  color: var(--text-secondary);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 16px;
+  border-top: 1px solid var(--border-color);
+  padding-top: 12px;
+}
+
+.sync-btn-container {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 8px;
+}
+
+.btn-sync-action {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 14px;
+  border-radius: 14px;
+  font-weight: 700;
+  font-size: 14px;
+  transition: all 0.2s;
+}
+
+.btn-sync-action.link {
+  background: var(--primary-color);
+  color: white;
+  box-shadow: 0 4px 15px var(--primary-glow);
+}
+
+.btn-sync-action.link:active {
+  transform: scale(0.98);
+}
+
+.btn-sync-action.unlink {
+  background: transparent;
+  color: var(--text-secondary);
+  border: 1px solid var(--border-color);
+}
+
+.btn-sync-action.restore {
+  background: transparent;
+  color: var(--text-primary);
+  border: 1px solid var(--border-color);
+}
+
+.btn-sync-action.restore:hover {
+  background: var(--surface-hover);
+}
+
