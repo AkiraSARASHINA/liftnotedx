@@ -253,7 +253,14 @@ const findBackupFile = async (token: string, signal?: AbortSignal): Promise<GDri
     signal
   });
   if (!res.ok) {
-    throw new Error(`Failed to list files: ${res.statusText}`);
+    let errorDetail = '';
+    try {
+      const errJson = await res.json();
+      errorDetail = JSON.stringify(errJson.error);
+    } catch {
+      errorDetail = `${res.status} ${res.statusText}`;
+    }
+    throw new Error(`Failed to list files: ${errorDetail}`);
   }
   const data = await res.json();
   return data.files && data.files.length > 0 ? data.files[0] : null;
@@ -271,7 +278,14 @@ export const downloadBackupData = async (signal?: AbortSignal): Promise<SyncData
     signal
   });
   if (!res.ok) {
-    throw new Error(`Failed to download backup: ${res.statusText}`);
+    let errorDetail = '';
+    try {
+      const errJson = await res.json();
+      errorDetail = JSON.stringify(errJson.error);
+    } catch {
+      errorDetail = `${res.status} ${res.statusText}`;
+    }
+    throw new Error(`Failed to download backup: ${errorDetail}`);
   }
   return await res.json();
 };
@@ -287,15 +301,15 @@ export const uploadBackupData = async (syncData: SyncData, signal?: AbortSignal)
   };
 
   const boundary = '3d9f1024-81b2-498b-90f7-11fd1024d293';
-  const delimiter = `\n--${boundary}\n`;
-  const closeDelimiter = `\n--${boundary}--\n`;
+  const delimiter = `\r\n--${boundary}\r\n`;
+  const closeDelimiter = `\r\n--${boundary}--\r\n`;
 
   const multipartRequestBody =
     delimiter +
-    'Content-Type: application/json; charset=UTF-8\n\n' +
+    'Content-Type: application/json; charset=UTF-8\r\n\r\n' +
     JSON.stringify(metadata) +
     delimiter +
-    'Content-Type: application/json; charset=UTF-8\n\n' +
+    'Content-Type: application/json; charset=UTF-8\r\n\r\n' +
     JSON.stringify(syncData) +
     closeDelimiter;
 
@@ -319,7 +333,14 @@ export const uploadBackupData = async (syncData: SyncData, signal?: AbortSignal)
   });
 
   if (!res.ok) {
-    throw new Error(`Failed to upload backup: ${res.statusText}`);
+    let errorDetail = '';
+    try {
+      const errJson = await res.json();
+      errorDetail = JSON.stringify(errJson.error);
+    } catch {
+      errorDetail = `${res.status} ${res.statusText}`;
+    }
+    throw new Error(`Failed to upload backup: ${errorDetail}`);
   }
 };
 
