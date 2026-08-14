@@ -295,10 +295,13 @@ export const uploadBackupData = async (syncData: SyncData, signal?: AbortSignal)
   const token = await getValidToken();
   const file = await findBackupFile(token, signal);
 
-  const metadata = {
-    name: BACKUP_FILE_NAME,
-    parents: ['appDataFolder']
+  const metadata: any = {
+    name: BACKUP_FILE_NAME
   };
+
+  if (!file) {
+    metadata.parents = ['appDataFolder'];
+  }
 
   const boundary = '3d9f1024-81b2-498b-90f7-11fd1024d293';
   const delimiter = `\r\n--${boundary}\r\n`;
