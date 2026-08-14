@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo, useRef, useLayoutEffect } from 'react';
 import { getAllWorkouts, getWorkoutByDate, saveWorkout, deleteWorkout, type Workout, type Exercise, type WorkoutSet } from '../lib/db';
-import { Info, Calendar as CalendarIcon, List as ListIcon, X, Edit2, Trash2, Plus, Save } from 'lucide-react';
+import { Info, Calendar as CalendarIcon, List as ListIcon, X, Edit2, Trash2, Plus, Save, ChevronDown } from 'lucide-react';
 import './Calendar.css';
 
 type ViewMode = 'grid' | 'list';
@@ -66,7 +66,11 @@ const CalendarPage: React.FC = () => {
       const sorted = [...all].sort((a, b) => b.date.localeCompare(a.date));
       const latestDateStr = sorted[0].date;
       const [year, month, day] = latestDateStr.split('-').map(Number);
-      const baseDate = new Date(year, month - 1, day);
+      const latestRecordDate = new Date(year, month - 1, day);
+
+      // 最終記録日と今日の日付を比較し、より新しい方を基準にする
+      const today = new Date();
+      const baseDate = latestRecordDate > today ? latestRecordDate : today;
 
       const initialMonths = [];
       for (let i = 5; i >= 0; i--) {
@@ -213,6 +217,43 @@ const CalendarPage: React.FC = () => {
     return days[d.getDay()];
   };
 
+  const todayStr = useMemo(() => {
+    const now = new Date();
+    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+  }, []);
+
+  // 現在月が表示範囲に含まれているか
+  const isCurrentMonthVisible = useMemo(() => {
+    const now = new Date();
+    const currentYear = now.getFullYear();
+    const currentMonth = now.getMonth();
+    return monthsToDisplay.some(m => m.getFullYear() === currentYear && m.getMonth() === currentMonth);
+  }, [monthsToDisplay]);
+
+  const scrollToBottom = () => {
+    if (scrollContainerRef.current) {
+      scrollContainerRef.current.scrollTop = scrollContainerRef.current.scrollHeight;
+    }
+  };
+
+  const goToCurrentMonth = () => {
+    const now = new Date();
+    const lastDisplayed = monthsToDisplay[monthsToDisplay.length - 1];
+    // 最後に表示された月から今月までの月を追加
+    const newMonths: Date[] = [];
+    const d = new Date(lastDisplayed);
+    d.setMonth(d.getMonth() + 1);
+    while (d.getFullYear() < now.getFullYear() || (d.getFullYear() === now.getFullYear() && d.getMonth() <= now.getMonth())) {
+      newMonths.push(new Date(d));
+      d.setMonth(d.getMonth() + 1);
+    }
+    if (newMonths.length > 0) {
+      setMonthsToDisplay([...monthsToDisplay, ...newMonths]);
+      // スクロールを一番下に移動（新しい月が追加された後）
+      setTimeout(scrollToBottom, 100);
+    }
+  };
+
   const renderMonthGrid = (date: Date) => {
     const year = date.getFullYear();
     const month = date.getMonth();
@@ -229,12 +270,14 @@ const CalendarPage: React.FC = () => {
       const dStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
       const hasWorkout = workoutMap[dStr];
       const isSelected = dStr === selectedDateStr;
+      const isFuture = dStr > todayStr;
+      const isToday = dStr === todayStr;
 
       days.push(
         <div 
           key={dStr} 
-          className={`calendar-day ${hasWorkout ? 'has-workout' : ''} ${isSelected ? 'selected' : ''}`}
-          onClick={() => handleDateClick(dStr)}
+          className={`calendar-day ${hasWorkout ? 'has-workout' : ''} ${isSelected ? 'selected' : ''} ${isFuture ? 'future' : ''} ${isToday ? 'today' : ''}`}
+          onClick={() => !isFuture && handleDateClick(dStr)}
         >
           <span>{d}</span>
           {hasWorkout && <div className="dot"></div>}
@@ -368,6 +411,12 @@ const CalendarPage: React.FC = () => {
             さらに過去を読み込む
           </button>
           {monthsToDisplay.map(m => renderMonthGrid(m))}
+          {!isCurrentMonthVisible && (
+            <button className="load-more-btn bottom" onClick={goToCurrentMonth}>
+              <ChevronDown size={16} />
+              今月へ
+            </button>
+          )}
         </div>
       ) : (
         <div className="timeline-list animate-in" ref={listScrollContainerRef}>

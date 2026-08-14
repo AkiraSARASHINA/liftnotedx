@@ -109,12 +109,33 @@
   background: white;
 }
 
+.calendar-day.future {
+  opacity: 0.25;
+  cursor: default;
+  pointer-events: none;
+}
+
+.calendar-day.today:not(.selected) {
+  outline: 2px solid var(--primary-color);
+  outline-offset: -2px;
+}
+
 .load-more-btn {
   background: var(--surface-hover);
   color: var(--text-secondary);
   padding: 10px;
   border-radius: 10px;
   border: 1px dashed var(--border-color);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  font-size: 13px;
+  flex-shrink: 0;
+}
+
+.load-more-btn.bottom {
+  margin-top: 8px;
 }
 
 /* Modal Header & Actions */
