@@ -3,8 +3,8 @@ import { saveWorkout, getWorkoutByDate, getAllWorkouts, type Workout } from '../
 import { ClipboardCheck, Save, AlertCircle, Copy, HelpCircle, X, Download, Upload } from 'lucide-react';
 import './Input.css';
 
-const AI_PROMPT = `ウェイトトレーニングの記録を以下のJSON形式に変換してください。
-複数の日程がある場合は、その配列を返してください。
+const AI_PROMPT = `添付されたトレーニングノートの画像から記録を読み取り、以下の【出力フォーマット】のJSON形式に変換してください。
+複数日の記録がある場合は、それらを配列に含めて出力してください。
 
 【出力フォーマット】
 [
@@ -13,8 +13,9 @@ const AI_PROMPT = `ウェイトトレーニングの記録を以下のJSON形式
     "exercises": [
       {
         "name": "種目名",
+        "equipment": "マシンメーカー名・器具名・バリエーション（該当があれば）",
         "isBodyweight": false,
-        "note": "備考（あれば）",
+        "note": "備考（セットの感想、グリップ、反動の有無、シート位置など）",
         "sets": [
           { "weight": 60, "reps": 10 },
           { "weight": 60, "reps": 8 }
@@ -24,10 +25,24 @@ const AI_PROMPT = `ウェイトトレーニングの記録を以下のJSON形式
   }
 ]
 
-【ルール】
-- 重量は数値のみ（kgは含めない）。
-- 自重種目の場合は isBodyweight を true にし、weight は含めない。
-- 1つの日付に同じ種目が複数回あっても構いません（そのままリストに含めてください）。`;
+【入力・分類ルール】
+1. 種目名（name）の統一ルール:
+   - 「ベンチプレス（止めアリ）」「ベンチプレス（テンポベンチ）」などは種目名を「ベンチプレス」とし、「止めアリ」「テンポベンチ」は equipment に記載してください。
+   - 「スクワット（止めアリ）」も種目名を「スクワット」とし、「止めアリ」は equipment に記載してください。
+   - 「ラットプルダウン（大円筋）」のように対象部位が固定化されている種目名はそのまま維持してください。
+
+2. 器具・メーカー名・バリエーション（equipment）の記載ルール:
+   - マシンメーカー名（ノーチラス, ハンマーストレングス, FLEX, CYBEX, NITRO evo, TECA, STRIVE, テクノジム, PRIME, Life Fitness, PRECOR, 初動負荷 など）が記載されている場合は equipment に抽出してください。
+   - バー種別（EZバー, ストレートバー など）やマシン形状（ヒジで押すタイプ など）も equipment に記載してください。
+   - 器具情報やバリエーション指定がないフリーウェイト等は省略（または空文字）にしてください。
+
+3. 備考（note）の記載ルール:
+   - マシンメーカー名以外のメモ（例: 「大円筋」「ナローグリップ」「サムレス」「ラスト2レップ反動アリ」「120kgまでノーギア」「イスの高さ9」など）は note に記載してください。
+
+4. 自重種目（isBodyweight）とセット内容（sets）:
+   - チンニング、ディップス、クランチ、ツイスティングリバースクランチ、レッグレイズ等の自重種目は isBodyweight: true とし、sets 内の weight は含めない（または省略）にしてください。加重した場合は isBodyweight: false とし weight を数値で記載してください。
+   - 重量は単位（kg）を含めず数値のみとしてください。
+   - 出力はマークダウンのコードブロック（\`\`\`json ... \`\`\`）のみを出力してください。`;
 
 const InputPage: React.FC = () => {
   const [jsonInput, setJsonInput] = useState('');
@@ -42,7 +57,12 @@ const InputPage: React.FC = () => {
     let count = 0;
 
     for (const workout of workouts) {
-      if (!workout.date || !workout.exercises) continue;
+      if (!workout.date || !workout.exercises || !Array.isArray(workout.exercises)) continue;
+      
+      const validExercises = workout.exercises.filter(
+        (ex: any) => ex && ex.name && Array.isArray(ex.sets) && ex.sets.length > 0
+      );
+      if (validExercises.length === 0) continue;
 
       const existingWorkout = await getWorkoutByDate(workout.date);
       let finalWorkout: Workout;
@@ -50,10 +70,13 @@ const InputPage: React.FC = () => {
       if (existingWorkout) {
         finalWorkout = {
           ...existingWorkout,
-          exercises: [...existingWorkout.exercises, ...workout.exercises]
+          exercises: [...existingWorkout.exercises, ...validExercises]
         };
       } else {
-        finalWorkout = workout;
+        finalWorkout = {
+          ...workout,
+          exercises: validExercises
+        };
       }
 
       await saveWorkout(finalWorkout);

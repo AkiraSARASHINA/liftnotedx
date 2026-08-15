@@ -24,6 +24,7 @@ const CalendarPage: React.FC = () => {
 
   const [monthsToDisplay, setMonthsToDisplay] = useState<Date[]>([]);
   const [uniqueNames, setUniqueNames] = useState<string[]>([]);
+  const [uniqueEquipments, setUniqueEquipments] = useState<string[]>([]);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const listScrollContainerRef = useRef<HTMLDivElement>(null);
 
@@ -54,16 +55,23 @@ const CalendarPage: React.FC = () => {
   }, []);
 
   const loadUniqueNames = async () => {
-    const names = await import('../lib/db').then(db => db.getUniqueExerciseNames());
+    const { getUniqueExerciseNames, getUniqueEquipmentNames } = await import('../lib/db');
+    const [names, equipments] = await Promise.all([
+      getUniqueExerciseNames(),
+      getUniqueEquipmentNames()
+    ]);
     setUniqueNames(names);
+    setUniqueEquipments(equipments);
   };
 
   const loadWorkouts = async () => {
     const all = await getAllWorkouts();
     setAllWorkouts(all);
 
-    if (all.length > 0) {
-      const sorted = [...all].sort((a, b) => b.date.localeCompare(a.date));
+    const activeWorkouts = all.filter(w => w.exercises && w.exercises.length > 0);
+
+    if (activeWorkouts.length > 0) {
+      const sorted = [...activeWorkouts].sort((a, b) => b.date.localeCompare(a.date));
       const latestDateStr = sorted[0].date;
       const [year, month, day] = latestDateStr.split('-').map(Number);
       const latestRecordDate = new Date(year, month - 1, day);
@@ -92,13 +100,17 @@ const CalendarPage: React.FC = () => {
   const workoutMap = useMemo(() => {
     const map: Record<string, boolean> = {};
     allWorkouts.forEach(w => {
-      map[w.date] = true;
+      if (w.exercises && w.exercises.length > 0) {
+        map[w.date] = true;
+      }
     });
     return map;
   }, [allWorkouts]);
 
   const sortedWorkouts = useMemo(() => {
-    return [...allWorkouts].sort((a, b) => a.date.localeCompare(b.date));
+    return allWorkouts
+      .filter(w => w.exercises && w.exercises.length > 0)
+      .sort((a, b) => a.date.localeCompare(b.date));
   }, [allWorkouts]);
 
   useLayoutEffect(() => {
@@ -153,6 +165,7 @@ const CalendarPage: React.FC = () => {
     setIsAddingExercise(true);
     setEditForm({
       name: '',
+      equipment: '',
       isBodyweight: false,
       note: '',
       sets: [{ weight: 0, reps: 0 }]
@@ -321,6 +334,20 @@ const CalendarPage: React.FC = () => {
         </datalist>
       </div>
 
+      <div className="form-group">
+        <label>マシン・メーカー名 / 器具</label>
+        <input 
+          type="text" 
+          list="equipment-options"
+          value={editForm.equipment || ''} 
+          onChange={e => setEditForm({ ...editForm, equipment: e.target.value })}
+          placeholder="例: Hammer Strength, Life Fitness, ダンベル..."
+        />
+        <datalist id="equipment-options">
+          {uniqueEquipments.map(eq => <option key={eq} value={eq} />)}
+        </datalist>
+      </div>
+
       <div className="form-group row">
         <label>
           <input 
@@ -428,7 +455,12 @@ const CalendarPage: React.FC = () => {
               </div>
               <div className="timeline-summary">
                 <div className="exercise-chips">
-                  {w.exercises.map((ex, i) => <span key={i} className="chip">{ex.name}</span>)}
+                  {w.exercises.map((ex, i) => (
+                    <span key={i} className="chip">
+                      {ex.name}
+                      {ex.equipment && <span className="chip-eq"> ({ex.equipment})</span>}
+                    </span>
+                  ))}
                 </div>
               </div>
             </div>
@@ -442,9 +474,11 @@ const CalendarPage: React.FC = () => {
             <div className="modal-header">
               <h3>{selectedDateStr} ({getDayOfWeek(selectedDateStr)})</h3>
               <div className="header-actions">
-                <button className="icon-btn delete-day" onClick={handleDeleteDay} title="日の削除">
-                  <Trash2 size={20} />
-                </button>
+                {selectedWorkout && selectedWorkout.exercises && selectedWorkout.exercises.length > 0 && (
+                  <button className="icon-btn delete-day" onClick={handleDeleteDay} title="日の削除">
+                    <Trash2 size={20} />
+                  </button>
+                )}
                 <button className="close-btn" onClick={() => setShowModal(false)}><X size={20} /></button>
               </div>
             </div>
@@ -457,7 +491,10 @@ const CalendarPage: React.FC = () => {
                       <div className="exercise-info">
                         <div className="exercise-header">
                           <span className="exercise-num">{i + 1}</span>
-                          <h4>{ex.name}</h4>
+                          <div className="exercise-title-group">
+                            <h4>{ex.name}</h4>
+                            {ex.equipment && <span className="equipment-chip">{ex.equipment}</span>}
+                          </div>
                           <div className="exercise-actions">
                             <button className="icon-btn edit" onClick={() => startEdit(i)}><Edit2 size={16} /></button>
                             <button className="icon-btn delete" onClick={() => handleDeleteExercise(i)}><Trash2 size={16} /></button>

@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { getExercisesByName, getUniqueExerciseNames, getWorkoutByDate, type Exercise, type Workout } from '../lib/db';
 import { 
-  LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell 
+  LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer 
 } from 'recharts';
 import { TrendingUp, Activity, RotateCcw, Info, Search, ChevronDown, X, ChevronLeft, Maximize2, List } from 'lucide-react';
 import './Charts.css';
@@ -13,6 +13,7 @@ interface ChartDataPoint {
   volume: number;
   reps: number;
   isBodyweight: boolean;
+  equipment?: string;
   exerciseDetail: Exercise;
 }
 
@@ -21,7 +22,10 @@ const ChartsPage: React.FC = () => {
   const [selectedName, setSelectedName] = useState<string>('');
   const [searchTerm, setSearchTerm] = useState('');
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
-  const [chartData, setChartData] = useState<ChartDataPoint[]>([]);
+  const [rawChartData, setRawChartData] = useState<ChartDataPoint[]>([]);
+  const [selectedEquipment, setSelectedEquipment] = useState<string>('all');
+  const [availableEquipments, setAvailableEquipments] = useState<string[]>([]);
+  const [hasNoEquipmentData, setHasNoEquipmentData] = useState<boolean>(false);
   const [selectedWorkout, setSelectedWorkout] = useState<Workout | null>(null);
   const [showModal, setShowModal] = useState(false);
   const [activeDate, setActiveDate] = useState<string | null>(null);
@@ -82,13 +86,42 @@ const ChartsPage: React.FC = () => {
         volume,
         reps,
         isBodyweight: ex.isBodyweight,
+        equipment: ex.equipment,
         exerciseDetail: ex
       };
     }).sort((a, b) => a.timestamp - b.timestamp);
-    setChartData(data);
+
+    setRawChartData(data);
+
+    // 器具名のユニーク一覧を抽出
+    const eqSet = new Set<string>();
+    let hasNone = false;
+    data.forEach(d => {
+      if (d.equipment && d.equipment.trim()) {
+        eqSet.add(d.equipment.trim());
+      } else {
+        hasNone = true;
+      }
+    });
+
+    const eqList = Array.from(eqSet).sort((a, b) => a.localeCompare(b, 'ja'));
+    setAvailableEquipments(eqList);
+    setHasNoEquipmentData(hasNone);
+    setSelectedEquipment('all');
     setSelectedWorkout(null);
     setActiveDate(null);
   };
+
+  // 選択された器具フィルターに基づいてチャートデータを絞り込み
+  const chartData = useMemo(() => {
+    if (selectedEquipment === 'all') {
+      return rawChartData;
+    }
+    if (selectedEquipment === '__none__') {
+      return rawChartData.filter(d => !d.equipment || !d.equipment.trim());
+    }
+    return rawChartData.filter(d => d.equipment?.trim() === selectedEquipment);
+  }, [rawChartData, selectedEquipment]);
 
   const filteredNames = useMemo(() => {
     return exerciseNames.filter(name => 
@@ -187,7 +220,7 @@ const ChartsPage: React.FC = () => {
       chartTitle = '総ボリューム';
       dataKey = 'volume';
       unit = 'kg';
-      strokeColor = 'rgba(0, 163, 255, 0.6)';
+      strokeColor = '#00e5a3';
       chartIcon = <Activity size={20} />;
     } else if (activeDetailType === 'reps') {
       chartTitle = '総レップ数';
@@ -230,135 +263,81 @@ const ChartsPage: React.FC = () => {
     const renderChartSection = (height: number) => (
       <div className="chart-container">
         <ResponsiveContainer width="100%" height={height}>
-          {activeDetailType === 'maxWeight' ? (
-            <LineChart 
-              data={displayChartData} 
-              onClick={handlePointClick} 
-              onMouseMove={handleChartMouseMove}
-              onMouseLeave={() => setActiveDate(null)}
-              margin={{ top: 10, right: 10, left: -20, bottom: 20 }}
-            >
-              <CartesianGrid strokeDasharray="3 3" stroke="#2a2a2a" vertical={false} />
-              <XAxis 
-                dataKey="timestamp" 
-                type="number"
-                scale="time"
-                domain={['dataMin', 'dataMax']}
-                stroke="#a0a0a0" 
-                fontSize={10} 
-                tickLine={false}
-                tickFormatter={(time: number) => {
-                  const d = new Date(time);
-                  return `${d.getMonth() + 1}/${d.getDate()}`;
-                }}
-              />
-              <YAxis stroke="#a0a0a0" fontSize={12} domain={['dataMin - 5', 'dataMax + 5']} />
-              <Tooltip 
-                content={<CustomTooltip />} 
-                wrapperStyle={{ pointerEvents: 'none' }}
-                active={activeDate !== null}
-              />
-              <Line 
-                type="monotone" 
-                dataKey={dataKey} 
-                name={chartTitle} 
-                unit={unit} 
-                stroke={strokeColor} 
-                strokeWidth={3}
-                activeDot={{ r: 8, strokeWidth: 0, cursor: 'pointer' }}
-                dot={(dotProps: any) => {
-                  const { cx, cy, payload } = dotProps;
-                  const isPB = pbDates.has(payload.date);
-                  // 設定がオン、または最高記録のみフィルターがオンの時にハイライト
-                  const shouldHighlight = isPB && (showPBHighlight || onlyShowPB);
-                  if (shouldHighlight) {
-                    return (
-                      <g key={`dot-${payload.date}`}>
-                        <circle cx={cx} cy={cy} r={8} fill="#ff9900" stroke="#fff" strokeWidth={2} style={{ cursor: 'pointer' }} />
-                        <circle cx={cx} cy={cy} r={12} fill="none" stroke="#ff5500" strokeWidth={1.5} opacity={0.6} style={{ cursor: 'pointer', transformOrigin: `${cx}px ${cy}px`, animation: 'pulse 2s infinite' }} />
-                      </g>
-                    );
-                  }
+          <LineChart 
+            data={displayChartData} 
+            onClick={handlePointClick} 
+            onMouseMove={handleChartMouseMove}
+            onMouseLeave={() => setActiveDate(null)}
+            margin={{ top: 10, right: 10, left: -20, bottom: 20 }}
+          >
+            <CartesianGrid strokeDasharray="3 3" stroke="#2a2a2a" vertical={false} />
+            <XAxis 
+              dataKey="timestamp" 
+              type="number"
+              scale="time"
+              domain={['dataMin', 'dataMax']}
+              stroke="#a0a0a0" 
+              fontSize={10} 
+              tickLine={false}
+              tickFormatter={(time: number) => {
+                const d = new Date(time);
+                return `${d.getMonth() + 1}/${d.getDate()}`;
+              }}
+            />
+            <YAxis stroke="#a0a0a0" fontSize={12} domain={['dataMin - 5', 'dataMax + 5']} />
+            <Tooltip 
+              content={<CustomTooltip />} 
+              wrapperStyle={{ pointerEvents: 'none' }}
+              active={activeDate !== null}
+            />
+            <Line 
+              type="monotone" 
+              dataKey={dataKey} 
+              name={chartTitle} 
+              unit={unit} 
+              stroke={strokeColor} 
+              strokeWidth={3}
+              activeDot={{ r: 8, strokeWidth: 0, cursor: 'pointer' }}
+              dot={(dotProps: any) => {
+                const { cx, cy, payload } = dotProps;
+                const isPB = pbDates.has(payload.date);
+                // 設定がオン、または最高記録のみフィルターがオンの時にハイライト
+                const shouldHighlight = isPB && (showPBHighlight || onlyShowPB);
+                if (shouldHighlight) {
                   return (
-                    <circle key={`dot-${payload.date}`} cx={cx} cy={cy} r={5} fill={strokeColor} strokeWidth={0} style={{ cursor: 'pointer' }} />
+                    <g key={`dot-${payload.date}`}>
+                      <circle cx={cx} cy={cy} r={8} fill="#ff9900" stroke="#fff" strokeWidth={2} style={{ cursor: 'pointer' }} />
+                      <circle cx={cx} cy={cy} r={12} fill="none" stroke="#ff5500" strokeWidth={1.5} opacity={0.6} style={{ cursor: 'pointer', transformOrigin: `${cx}px ${cy}px`, animation: 'pulse 2s infinite' }} />
+                    </g>
                   );
-                }}
-              />
-            </LineChart>
-          ) : (
-            <BarChart 
-              data={displayChartData} 
-              onClick={handlePointClick} 
-              onMouseMove={handleChartMouseMove}
-              onMouseLeave={() => setActiveDate(null)}
-              margin={{ top: 10, right: 10, left: -20, bottom: 20 }}
-            >
-              <CartesianGrid strokeDasharray="3 3" stroke="#2a2a2a" vertical={false} />
-              <XAxis 
-                dataKey="timestamp" 
-                type="number"
-                scale="time"
-                domain={['dataMin', 'dataMax']}
-                stroke="#a0a0a0" 
-                fontSize={10} 
-                tickLine={false}
-                tickFormatter={(time: number) => {
-                  const d = new Date(time);
-                  return `${d.getMonth() + 1}/${d.getDate()}`;
-                }}
-              />
-              <YAxis stroke="#a0a0a0" fontSize={12} />
-              <Tooltip 
-                content={<CustomTooltip />} 
-                wrapperStyle={{ pointerEvents: 'none' }}
-                active={activeDate !== null}
-              />
-              <Bar 
-                dataKey={dataKey} 
-                name={chartTitle} 
-                unit={unit} 
-                fill={strokeColor} 
-                radius={[6, 6, 0, 0]} 
-                cursor="pointer"
-                barSize={16}
-              >
-                {displayChartData.map((entry, index) => {
-                  const isPB = pbDates.has(entry.date);
-                  const shouldHighlight = isPB && (showPBHighlight || onlyShowPB);
-                  let cellColor = strokeColor;
-                  if (activeDate === entry.date) {
-                    cellColor = 'var(--primary-color)';
-                  } else if (shouldHighlight) {
-                    cellColor = '#ff9900';
-                  }
-                  return (
-                    <Cell 
-                      key={`cell-${index}`} 
-                      fill={cellColor} 
-                    />
-                  );
-                })}
-              </Bar>
-            </BarChart>
-          )}
+                }
+                return (
+                  <circle key={`dot-${payload.date}`} cx={cx} cy={cy} r={5} fill={strokeColor} strokeWidth={0} style={{ cursor: 'pointer' }} />
+                );
+              }}
+            />
+          </LineChart>
         </ResponsiveContainer>
       </div>
     );
 
     const renderHistoryItems = (items: ChartDataPoint[]) => (
       <div className="history-list">
-        {items.map((item) => {
+        {items.map((item, idx) => {
           const isPB = pbDates.has(item.date);
           const shouldHighlight = isPB && (showPBHighlight || onlyShowPB);
           return (
             <div 
-              key={item.date} 
+              key={`${item.date}-${item.equipment || 'none'}-${idx}`} 
               className={`history-item card animate-in ${shouldHighlight ? 'pb-highlight' : ''}`}
               onClick={() => handlePointClick({ date: item.date })}
             >
               <div className="history-date-col">
                 <div className="history-date-row">
                   <span className="history-date">{item.date}</span>
+                  {item.equipment && (
+                    <span className="equipment-chip">{item.equipment}</span>
+                  )}
                   {shouldHighlight && <span className="pb-badge">最高記録🔥</span>}
                 </div>
                 <span className="history-dayofweek">({getDayOfWeek(item.date)}曜日)</span>
@@ -389,6 +368,12 @@ const ChartsPage: React.FC = () => {
       </div>
     );
 
+    const equipmentDisplayLabel = selectedEquipment === 'all' 
+      ? '' 
+      : selectedEquipment === '__none__' 
+        ? ' [指定なし]' 
+        : ` [${selectedEquipment}]`;
+
     return (
       <div className="detail-view animate-in">
         <div className="detail-view-header">
@@ -403,7 +388,10 @@ const ChartsPage: React.FC = () => {
               {detailSubView === 'history_only' && '（全記録）'}
               {detailSubView === 'summary' && '（概要）'}
             </h2>
-            <span>{selectedName}</span>
+            <span>
+              {selectedName}
+              {equipmentDisplayLabel && <strong className="detail-equipment-tag">{equipmentDisplayLabel}</strong>}
+            </span>
           </div>
         </div>
 
@@ -481,6 +469,50 @@ const ChartsPage: React.FC = () => {
     );
   };
 
+  const renderEquipmentFilter = () => {
+    // 器具名が1件以上ある場合にフィルターを表示
+    if (availableEquipments.length === 0) return null;
+
+    const allCount = rawChartData.length;
+    const noneCount = rawChartData.filter(d => !d.equipment || !d.equipment.trim()).length;
+
+    return (
+      <div className="equipment-filter-container card">
+        <div className="equipment-filter-label">
+          <span>マシン / 器具で絞り込み</span>
+        </div>
+        <div className="equipment-pills-list">
+          <button 
+            className={`equipment-pill ${selectedEquipment === 'all' ? 'active' : ''}`}
+            onClick={() => setSelectedEquipment('all')}
+          >
+            すべて <span className="pill-count">({allCount})</span>
+          </button>
+          {availableEquipments.map(eq => {
+            const count = rawChartData.filter(d => d.equipment?.trim() === eq).length;
+            return (
+              <button 
+                key={eq} 
+                className={`equipment-pill ${selectedEquipment === eq ? 'active' : ''}`}
+                onClick={() => setSelectedEquipment(eq)}
+              >
+                {eq} <span className="pill-count">({count})</span>
+              </button>
+            );
+          })}
+          {hasNoEquipmentData && (
+            <button 
+              className={`equipment-pill ${selectedEquipment === '__none__' ? 'active' : ''}`}
+              onClick={() => setSelectedEquipment('__none__')}
+            >
+              指定なし <span className="pill-count">({noneCount})</span>
+            </button>
+          )}
+        </div>
+      </div>
+    );
+  };
+
   return (
     <div className="charts-page">
       {activeDetailType === null ? (
@@ -531,6 +563,9 @@ const ChartsPage: React.FC = () => {
             </div>
           </div>
 
+          {/* マシン・器具フィルター */}
+          {renderEquipmentFilter()}
+
           {!isBodyweight && chartData.length > 0 && (
             <div className="chart-section card" onClick={() => setActiveDetailType('maxWeight')}>
               <div className="chart-header">
@@ -567,15 +602,21 @@ const ChartsPage: React.FC = () => {
               </div>
               <div className="chart-container" style={{ pointerEvents: 'none' }}>
                 <ResponsiveContainer width="100%" height={220}>
-                  <BarChart 
+                  <LineChart 
                     data={chartData} 
                     margin={{ top: 10, right: 10, left: -20, bottom: 0 }}
                   >
                     <CartesianGrid strokeDasharray="3 3" stroke="#2a2a2a" vertical={false} />
                     <XAxis dataKey="timestamp" type="number" scale="time" domain={['dataMin', 'dataMax']} hide />
                     <YAxis stroke="#a0a0a0" fontSize={12} />
-                    <Bar dataKey="volume" fill="rgba(0, 163, 255, 0.4)" radius={[4, 4, 0, 0]} barSize={16} />
-                  </BarChart>
+                    <Line 
+                      type="monotone" 
+                      dataKey="volume" 
+                      stroke="#00e5a3" 
+                      strokeWidth={3}
+                      dot={{ r: 4, fill: '#00e5a3', strokeWidth: 0 }}
+                    />
+                  </LineChart>
                 </ResponsiveContainer>
               </div>
             </div>
@@ -589,15 +630,21 @@ const ChartsPage: React.FC = () => {
               </div>
               <div className="chart-container" style={{ pointerEvents: 'none' }}>
                 <ResponsiveContainer width="100%" height={220}>
-                  <BarChart 
+                  <LineChart 
                     data={chartData} 
                     margin={{ top: 10, right: 10, left: -20, bottom: 0 }}
                   >
                     <CartesianGrid strokeDasharray="3 3" stroke="#2a2a2a" vertical={false} />
                     <XAxis dataKey="timestamp" type="number" scale="time" domain={['dataMin', 'dataMax']} hide />
                     <YAxis stroke="#a0a0a0" fontSize={12} />
-                    <Bar dataKey="reps" fill="rgba(255, 0, 85, 0.4)" radius={[4, 4, 0, 0]} barSize={16} />
-                  </BarChart>
+                    <Line 
+                      type="monotone" 
+                      dataKey="reps" 
+                      stroke="rgba(255, 0, 85, 0.8)" 
+                      strokeWidth={3}
+                      dot={{ r: 4, fill: 'rgba(255, 0, 85, 0.8)', strokeWidth: 0 }}
+                    />
+                  </LineChart>
                 </ResponsiveContainer>
               </div>
             </div>
@@ -605,7 +652,7 @@ const ChartsPage: React.FC = () => {
 
           {chartData.length === 0 && selectedName && (
             <div className="no-data card">
-              <p>データがありません。</p>
+              <p>該当する条件のデータがありません。</p>
             </div>
           )}
         </>
@@ -626,7 +673,10 @@ const ChartsPage: React.FC = () => {
                   <div className="exercise-info">
                     <div className="exercise-header">
                       <span className="exercise-num">{i + 1}</span>
-                      <h4 className={ex.name === selectedName ? 'highlight' : ''}>{ex.name}</h4>
+                      <div className="exercise-title-group">
+                        <h4 className={ex.name === selectedName ? 'highlight' : ''}>{ex.name}</h4>
+                        {ex.equipment && <span className="equipment-chip">{ex.equipment}</span>}
+                      </div>
                     </div>
                     {ex.note && <p className="note"><Info size={12} /> {ex.note}</p>}
                   </div>

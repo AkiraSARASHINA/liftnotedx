@@ -8,6 +8,7 @@ export interface WorkoutSet {
 export interface Exercise {
   name: string;
   isBodyweight: boolean;
+  equipment?: string;
   note?: string;
   sets: WorkoutSet[];
 }
@@ -102,29 +103,45 @@ export const deleteWorkout = async (date: string) => {
 
 export const getExercisesByName = async (name: string) => {
   const workouts = await getAllWorkouts();
-  return workouts
+  const results: { date: string; exercise: Exercise }[] = [];
+
+  workouts
     .sort((a, b) => a.date.localeCompare(b.date))
-    .map(w => {
+    .forEach(w => {
       const matchingExercises = w.exercises.filter(e => e.name === name);
-      if (matchingExercises.length === 0) return null;
+      if (matchingExercises.length === 0) return;
 
-      // Merge multiple sessions of the same exercise on the same day
-      const mergedExercise: Exercise = {
-        name,
-        isBodyweight: matchingExercises[0].isBodyweight,
-        note: matchingExercises
-          .map(e => e.note)
-          .filter(n => !!n)
-          .join(' / '),
-        sets: matchingExercises.flatMap(e => e.sets)
-      };
+      // 器具ごとにグループ化するか、または各セッションを展開
+      // 器具が同じ場合はマージ、異なる場合はそれぞれのセッションとして保持
+      const equipmentGroups = new Map<string, Exercise[]>();
+      matchingExercises.forEach(ex => {
+        const eqKey = ex.equipment?.trim() || '';
+        if (!equipmentGroups.has(eqKey)) {
+          equipmentGroups.set(eqKey, []);
+        }
+        equipmentGroups.get(eqKey)!.push(ex);
+      });
 
-      return {
-        date: w.date,
-        exercise: mergedExercise
-      };
-    })
-    .filter((item): item is { date: string; exercise: Exercise } => item !== null);
+      equipmentGroups.forEach((exList, eqKey) => {
+        const mergedExercise: Exercise = {
+          name,
+          isBodyweight: exList[0].isBodyweight,
+          equipment: eqKey || undefined,
+          note: exList
+            .map(e => e.note)
+            .filter(n => !!n)
+            .join(' / '),
+          sets: exList.flatMap(e => e.sets)
+        };
+
+        results.push({
+          date: w.date,
+          exercise: mergedExercise
+        });
+      });
+    });
+
+  return results;
 };
 
 export const getUniqueExerciseNames = async () => {
@@ -149,3 +166,20 @@ export const getUniqueExerciseNames = async () => {
     })
     .map(entry => entry[0]);
 };
+
+export const getUniqueEquipmentNames = async (exerciseName?: string) => {
+  const workouts = await getAllWorkouts();
+  const equipmentSet = new Set<string>();
+
+  workouts.forEach(w => {
+    w.exercises.forEach(e => {
+      if (exerciseName && e.name !== exerciseName) return;
+      if (e.equipment && e.equipment.trim()) {
+        equipmentSet.add(e.equipment.trim());
+      }
+    });
+  });
+
+  return Array.from(equipmentSet).sort((a, b) => a.localeCompare(b, 'ja'));
+};
+
