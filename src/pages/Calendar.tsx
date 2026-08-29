@@ -29,11 +29,8 @@ import {
   Plus, 
   Save, 
   ChevronDown, 
-  Dumbbell, 
   Activity, 
-  RotateCcw, 
   Layers, 
-  LayoutGrid,
   ChevronLeft,
   Flame
 } from 'lucide-react';

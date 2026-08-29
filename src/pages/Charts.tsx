@@ -32,9 +32,7 @@ import {
   Award, 
   ArrowUpRight, 
   ArrowDownRight, 
-  Minus,
-  Dumbbell,
-  BarChart3
+  Minus
 } from 'lucide-react';
 import './Charts.css';
 
