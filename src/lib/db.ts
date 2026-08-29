@@ -1,15 +1,82 @@
 import { openDB, type DBSchema, type IDBPDatabase } from 'idb';
 
+export type PPLCategory = 'プッシュ' | 'プル' | 'レッグ' | 'それ以外';
+export type BodyPartCategory = '胸' | '背中' | '脚' | '肩' | '腕' | 'それ以外';
+
 export interface WorkoutSet {
   weight?: number;
   reps: number;
+  estimated1RM?: number;
 }
+
+/**
+ * 5分割法の部位に応じた推定1RMの算出
+ * - 胸: Mayhew 式   1RM = (100 * w) / (52.2 + 41.9 * e^(-0.055 * r))
+ * - 背中 / 脚: Epley 式 1RM = w * (1 + r / 30)
+ * - 肩: Brzycki 式  1RM = w * (36 / (37 - r))
+ * - 腕 / それ以外(その他): Wathan 式 1RM = (100 * w) / (48.8 + 53.8 * e^(-0.075 * r))
+ * - 未分類: 対象外 (undefined)
+ */
+export const calculate1RM = (
+  weight?: number, 
+  reps?: number, 
+  bodyPart?: BodyPartCategory
+): number | undefined => {
+  if (weight === undefined || weight === null || weight <= 0 || !reps || reps <= 0) {
+    return undefined;
+  }
+  if (!bodyPart) {
+    return undefined;
+  }
+  if (reps === 1) {
+    return weight;
+  }
+
+  let oneRM: number | undefined;
+
+  switch (bodyPart) {
+    case '胸':
+      // Mayhew 式
+      oneRM = (100 * weight) / (52.2 + 41.9 * Math.exp(-0.055 * reps));
+      break;
+
+    case '背中':
+    case '脚':
+      // Epley 式
+      oneRM = weight * (1 + reps / 30);
+      break;
+
+    case '肩':
+      // Brzycki 式
+      if (reps >= 37) return undefined;
+      oneRM = weight * (36 / (37 - reps));
+      break;
+
+    case '腕':
+    case 'それ以外':
+      // Wathan 式
+      oneRM = (100 * weight) / (48.8 + 53.8 * Math.exp(-0.075 * reps));
+      break;
+
+    default:
+      return undefined;
+  }
+
+  return oneRM !== undefined ? Math.round(oneRM * 10) / 10 : undefined;
+};
+
+// 互換用 Brzycki式
+export const calculateBrzycki1RM = (weight?: number, reps?: number): number | undefined => {
+  return calculate1RM(weight, reps, '肩');
+};
 
 export interface Exercise {
   name: string;
   isBodyweight: boolean;
   equipment?: string;
   note?: string;
+  ppl?: PPLCategory;
+  bodyPart?: BodyPartCategory;
   sets: WorkoutSet[];
 }
 
@@ -74,8 +141,26 @@ const notifyDBChange = () => {
 
 export const saveWorkout = async (workout: Workout) => {
   const db = await initDB();
+
+  // 自重種目以外の全セットに対して、5分割法部位ごとのモデルで推定1RMを自動計算・付与
+  const normalizedExercises = workout.exercises.map(ex => ({
+    ...ex,
+    sets: ex.sets.map(set => {
+      if (ex.isBodyweight || !set.weight || !ex.bodyPart) {
+        const { estimated1RM, ...rest } = set;
+        return rest;
+      }
+      const calculated1RM = calculate1RM(set.weight, set.reps, ex.bodyPart);
+      return {
+        ...set,
+        estimated1RM: calculated1RM
+      };
+    })
+  }));
+
   const workoutWithTimestamp: Workout = {
     ...workout,
+    exercises: normalizedExercises,
     updatedAt: new Date().toISOString(),
   };
   const result = await db.put('workouts', workoutWithTimestamp);
@@ -127,6 +212,8 @@ export const getExercisesByName = async (name: string) => {
           name,
           isBodyweight: exList[0].isBodyweight,
           equipment: eqKey || undefined,
+          ppl: exList.find(e => !!e.ppl)?.ppl,
+          bodyPart: exList.find(e => !!e.bodyPart)?.bodyPart,
           note: exList
             .map(e => e.note)
             .filter(n => !!n)
@@ -167,6 +254,17 @@ export const getUniqueExerciseNames = async () => {
     .map(entry => entry[0]);
 };
 
+/**
+ * カンマやスラッシュで区切られた器具・マシン・バリエーションタグを配列に分解する
+ */
+export const parseEquipmentTags = (equipment?: string): string[] => {
+  if (!equipment) return [];
+  return equipment
+    .split(/[,/、]/)
+    .map(t => t.trim())
+    .filter(Boolean);
+};
+
 export const getUniqueEquipmentNames = async (exerciseName?: string) => {
   const workouts = await getAllWorkouts();
   const equipmentSet = new Set<string>();
@@ -175,7 +273,8 @@ export const getUniqueEquipmentNames = async (exerciseName?: string) => {
     w.exercises.forEach(e => {
       if (exerciseName && e.name !== exerciseName) return;
       if (e.equipment && e.equipment.trim()) {
-        equipmentSet.add(e.equipment.trim());
+        const tags = parseEquipmentTags(e.equipment);
+        tags.forEach(tag => equipmentSet.add(tag));
       }
     });
   });

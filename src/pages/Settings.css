@@ -274,3 +274,35 @@ input:checked + .slider:before {
   background: var(--surface-hover);
 }
 
+/* Font Size Selector */
+.font-size-pills {
+  display: flex;
+  gap: 6px;
+  background: rgba(255, 255, 255, 0.05);
+  padding: 4px;
+  border-radius: 12px;
+  border: 1px solid var(--border-color);
+}
+
+.font-size-pill {
+  padding: 6px 14px;
+  border-radius: 8px;
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.font-size-pill:hover {
+  color: var(--text-primary);
+}
+
+.font-size-pill.active {
+  background: var(--primary-color);
+  color: white;
+  box-shadow: 0 2px 8px rgba(0, 163, 255, 0.3);
+}
+

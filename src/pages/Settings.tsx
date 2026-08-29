@@ -29,6 +29,8 @@ import './Settings.css';
 const SettingsPage: React.FC = () => {
   const [highlightPB, setHighlightPB] = useState<boolean>(false);
   const [theme, setTheme] = useState<'dark' | 'light'>('dark');
+  const [summaryFontSize, setSummaryFontSize] = useState<'small' | 'medium' | 'large'>('small');
+  const [calendarRingMode, setCalendarRingMode] = useState<'ppl' | 'bodypart' | 'none'>('ppl');
   
   // Sync state
   const [syncStatus, setSyncStatus] = useState<string>('unlinked');
@@ -43,6 +45,12 @@ const SettingsPage: React.FC = () => {
 
     const storedTheme = (localStorage.getItem('app_theme') as 'dark' | 'light') || 'dark';
     setTheme(storedTheme);
+
+    const storedFontSize = (localStorage.getItem('settings_summary_font_size') as 'small' | 'medium' | 'large') || 'small';
+    setSummaryFontSize(storedFontSize);
+
+    const storedRingMode = (localStorage.getItem('settings_calendar_ring_mode') as 'ppl' | 'bodypart' | 'none') || 'ppl';
+    setCalendarRingMode(storedRingMode);
 
     // Initial state check
     setAutoUpload(isAutoUploadEnabled());
@@ -253,6 +261,54 @@ const SettingsPage: React.FC = () => {
               />
               <span className="slider"></span>
             </label>
+          </div>
+
+          <div className="setting-item">
+            <div className="setting-info">
+              <span className="setting-title">日別サマリーの文字サイズ</span>
+              <span className="setting-desc">サマリー画面の種目一覧の表示サイズ（密度）を調整します。</span>
+            </div>
+            <div className="font-size-pills">
+              {(['small', 'medium', 'large'] as const).map((size) => (
+                <button
+                  key={size}
+                  type="button"
+                  className={`font-size-pill ${summaryFontSize === size ? 'active' : ''}`}
+                  onClick={() => {
+                    setSummaryFontSize(size);
+                    localStorage.setItem('settings_summary_font_size', size);
+                  }}
+                >
+                  {size === 'small' ? '小' : size === 'medium' ? '中' : '大'}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="setting-item">
+            <div className="setting-info">
+              <span className="setting-title">カレンダーの日付リング表示</span>
+              <span className="setting-desc">記録がある日の日付周囲にPPLまたは5分割の比率リングを表示します。</span>
+            </div>
+            <div className="font-size-pills">
+              {[
+                { key: 'ppl', label: 'PPL' },
+                { key: 'bodypart', label: '5分割' },
+                { key: 'none', label: 'オフ' }
+              ].map((opt) => (
+                <button
+                  key={opt.key}
+                  type="button"
+                  className={`font-size-pill ${calendarRingMode === opt.key ? 'active' : ''}`}
+                  onClick={() => {
+                    setCalendarRingMode(opt.key as any);
+                    localStorage.setItem('settings_calendar_ring_mode', opt.key);
+                  }}
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
           </div>
         </div>
       </section>
