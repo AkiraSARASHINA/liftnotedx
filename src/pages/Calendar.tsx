@@ -28,18 +28,13 @@ const CalendarPage: React.FC = () => {
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const listScrollContainerRef = useRef<HTMLDivElement>(null);
 
+  // 各ビューモードの初回スクロール完了フラグ
+  const initialScrollGridRef = useRef<boolean>(false);
+  const initialScrollListRef = useRef<boolean>(false);
+
   useEffect(() => {
-    loadWorkouts();
+    loadWorkouts(true);
     loadUniqueNames();
-    const initialMonths = [];
-    const baseDate = new Date();
-    for (let i = 5; i >= 0; i--) {
-      const d = new Date(baseDate);
-      d.setDate(1);
-      d.setMonth(d.getMonth() - i);
-      initialMonths.push(d);
-    }
-    setMonthsToDisplay(initialMonths);
 
     // カレンダーページでは.contentのスクロールを無効化し、
     // カレンダー/リスト内部のスクロールのみを有効にする
@@ -64,21 +59,23 @@ const CalendarPage: React.FC = () => {
     setUniqueEquipments(equipments);
   };
 
-  const loadWorkouts = async () => {
+  const loadWorkouts = async (isInitial = false) => {
     const all = await getAllWorkouts();
     setAllWorkouts(all);
 
-    const activeWorkouts = all.filter(w => w.exercises && w.exercises.length > 0);
+    // 初回のみ表示月リスト（直近6ヶ月）を生成
+    if (isInitial) {
+      const activeWorkouts = all.filter(w => w.exercises && w.exercises.length > 0);
+      let baseDate = new Date();
 
-    if (activeWorkouts.length > 0) {
-      const sorted = [...activeWorkouts].sort((a, b) => b.date.localeCompare(a.date));
-      const latestDateStr = sorted[0].date;
-      const [year, month, day] = latestDateStr.split('-').map(Number);
-      const latestRecordDate = new Date(year, month - 1, day);
-
-      // 最終記録日と今日の日付を比較し、より新しい方を基準にする
-      const today = new Date();
-      const baseDate = latestRecordDate > today ? latestRecordDate : today;
+      if (activeWorkouts.length > 0) {
+        const sorted = [...activeWorkouts].sort((a, b) => b.date.localeCompare(a.date));
+        const latestDateStr = sorted[0].date;
+        const [year, month, day] = latestDateStr.split('-').map(Number);
+        const latestRecordDate = new Date(year, month - 1, day);
+        const today = new Date();
+        baseDate = latestRecordDate > today ? latestRecordDate : today;
+      }
 
       const initialMonths = [];
       for (let i = 5; i >= 0; i--) {
@@ -113,13 +110,20 @@ const CalendarPage: React.FC = () => {
       .sort((a, b) => a.date.localeCompare(b.date));
   }, [allWorkouts]);
 
+  // 初回表示時のみ最下部（最新日）へスクロール
   useLayoutEffect(() => {
     if (viewMode === 'grid' && scrollContainerRef.current) {
-      scrollContainerRef.current.scrollTop = scrollContainerRef.current.scrollHeight;
+      if (!initialScrollGridRef.current && monthsToDisplay.length > 0) {
+        scrollContainerRef.current.scrollTop = scrollContainerRef.current.scrollHeight;
+        initialScrollGridRef.current = true;
+      }
     } else if (viewMode === 'list' && listScrollContainerRef.current) {
-      listScrollContainerRef.current.scrollTop = listScrollContainerRef.current.scrollHeight;
+      if (!initialScrollListRef.current && sortedWorkouts.length > 0) {
+        listScrollContainerRef.current.scrollTop = listScrollContainerRef.current.scrollHeight;
+        initialScrollListRef.current = true;
+      }
     }
-  }, [viewMode, monthsToDisplay[monthsToDisplay.length - 1]?.getTime(), sortedWorkouts.length]);
+  }, [viewMode, monthsToDisplay.length, sortedWorkouts.length]);
 
   const handleDateClick = async (dateStr: string) => {
     const workout = await getWorkoutByDate(dateStr);
@@ -426,6 +430,10 @@ const CalendarPage: React.FC = () => {
       {viewMode === 'grid' ? (
         <div className="vertical-calendar card animate-in" ref={scrollContainerRef}>
           <button className="load-more-btn top" onClick={() => {
+            const container = scrollContainerRef.current;
+            const previousScrollHeight = container ? container.scrollHeight : 0;
+            const previousScrollTop = container ? container.scrollTop : 0;
+
             const lastMonth = monthsToDisplay[0];
             const newMonths = [];
             for (let i = 6; i >= 1; i--) {
@@ -434,6 +442,14 @@ const CalendarPage: React.FC = () => {
               newMonths.push(d);
             }
             setMonthsToDisplay([...newMonths, ...monthsToDisplay]);
+
+            // DOM更新後に過去月が上に追加された分の高さを補正して見ていた位置を維持
+            requestAnimationFrame(() => {
+              if (container) {
+                const heightDiff = container.scrollHeight - previousScrollHeight;
+                container.scrollTop = previousScrollTop + heightDiff;
+              }
+            });
           }}>
             さらに過去を読み込む
           </button>
