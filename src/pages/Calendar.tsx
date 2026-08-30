@@ -977,21 +977,14 @@ const CalendarPage: React.FC = () => {
                 </div>
 
                 <div className="timeline-metrics">
-                  <div className="metrics-inline">
-                    <div className="metric-unit">
-                      <span className="metric-num">{exerciseCount}</span>
-                      <span className="metric-label">種目</span>
-                    </div>
-                    <span className="metric-divider">/</span>
-                    <div className="metric-unit">
-                      <span className="metric-num">{totalSets}</span>
-                      <span className="metric-label">sets</span>
-                    </div>
-                    <span className="metric-divider">/</span>
-                    <div className="metric-unit">
-                      <span className="metric-num">{totalReps}</span>
-                      <span className="metric-label">reps</span>
-                    </div>
+                  <div className="metrics-main">
+                    <span className="metric-main-num">{exerciseCount}</span>
+                    <span className="metric-main-label">種目</span>
+                  </div>
+                  <div className="metrics-sub">
+                    <span>{totalSets} sets</span>
+                    <span className="metric-dot">·</span>
+                    <span>{totalReps} reps</span>
                   </div>
                 </div>
 

@@ -439,6 +439,39 @@ const ChartsPage: React.FC = () => {
         daysCount: es.daysCount
       }));
 
+      // 種目別月間実績テーブル用ソート関数:
+      // 1. PPL分類（プッシュ -> プル -> レッグ -> それ以外 -> 有酸素）
+      // 2. 5分割部位（胸 -> 背中 -> 脚 -> 肩 -> 腕 -> それ以外）
+      // 3. あいうえお順（日本語ロケール）
+      const getPplOrder = (ex: MonthlyExerciseSummary): number => {
+        if (ex.isCardio) return 4;
+        if (ex.ppl === 'プッシュ') return 0;
+        if (ex.ppl === 'プル') return 1;
+        if (ex.ppl === 'レッグ') return 2;
+        return 3;
+      };
+
+      const getBodyPartOrder = (ex: MonthlyExerciseSummary): number => {
+        if (ex.bodyPart === '胸') return 0;
+        if (ex.bodyPart === '背中') return 1;
+        if (ex.bodyPart === '脚') return 2;
+        if (ex.bodyPart === '肩') return 3;
+        if (ex.bodyPart === '腕') return 4;
+        return 5;
+      };
+
+      const sortedExSummaries = [...exSummaries].sort((a, b) => {
+        const pplDiff = getPplOrder(a) - getPplOrder(b);
+        if (pplDiff !== 0) return pplDiff;
+
+        if (!a.isCardio && !b.isCardio) {
+          const bpDiff = getBodyPartOrder(a) - getBodyPartOrder(b);
+          if (bpDiff !== 0) return bpDiff;
+        }
+
+        return a.name.localeCompare(b.name, 'ja');
+      });
+
       // その月のPB一覧
       const pbList: { name: string; date: string; reasons: string[] }[] = [];
       workouts.forEach(w => {
@@ -531,7 +564,7 @@ const ChartsPage: React.FC = () => {
         bodyPartLegendData,
         topExercisesByReps,
         pbList,
-        exerciseSummaries: exSummaries
+        exerciseSummaries: sortedExSummaries
       });
     });
 
