@@ -76,7 +76,7 @@ const PPL_COLORS: Record<string, string> = {
 const BODY_PART_COLORS: Record<string, string> = {
   '胸': '#ff2d55',
   '背中': '#00a3ff',
-  '脚': '#34c759',
+  '脚': '#00e5a3',
   '肩': '#ff9500',
   '腕': '#af52de',
   'それ以外': '#8e8e93'
@@ -179,11 +179,20 @@ const ChartsPage: React.FC = () => {
   const [onlyShowPB, setOnlyShowPB] = useState<boolean>(false);
   const [timeRangeScale, setTimeRangeScale] = useState<TimeRangeScale>('6m');
   const [unitFilter, setUnitFilter] = useState<'all' | 'kg' | 'lbs'>('all');
+  const [summaryFontSize, setSummaryFontSize] = useState<'small' | 'medium' | 'large'>('small');
   const expandedChartScrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     loadExerciseNames();
     loadAllWorkouts();
+
+    const syncSettings = () => {
+      const storedFontSize = (localStorage.getItem('settings_summary_font_size') as 'small' | 'medium' | 'large') || 'small';
+      setSummaryFontSize(storedFontSize);
+    };
+
+    syncSettings();
+    window.addEventListener('focus', syncSettings);
     
     // Global click listener to clear active chart point when clicking outside
     const handleGlobalClick = (e: MouseEvent | TouchEvent) => {
@@ -196,6 +205,7 @@ const ChartsPage: React.FC = () => {
     window.addEventListener('mousedown', handleGlobalClick);
     window.addEventListener('touchstart', handleGlobalClick);
     return () => {
+      window.removeEventListener('focus', syncSettings);
       window.removeEventListener('mousedown', handleGlobalClick);
       window.removeEventListener('touchstart', handleGlobalClick);
     };
@@ -487,18 +497,18 @@ const ChartsPage: React.FC = () => {
         });
       });
 
-      const pplData = Object.entries(pplRepsMap)
-        .filter(([_, val]) => val > 0)
-        .map(([name, value]) => ({ name, value }));
+      const pplData = PPL_OPTIONS
+        .map(name => ({ name, value: pplRepsMap[name] || 0 }))
+        .filter(item => item.value > 0);
 
       const pplLegendData = PPL_OPTIONS.map(cat => ({
         name: cat,
         value: pplRepsMap[cat] || 0
       }));
 
-      const bodyPartData = Object.entries(bodyPartRepsMap)
-        .filter(([_, val]) => val > 0)
-        .map(([name, value]) => ({ name, value }));
+      const bodyPartData = BODY_PART_OPTIONS
+        .map(name => ({ name, value: bodyPartRepsMap[name] || 0 }))
+        .filter(item => item.value > 0);
 
       const bodyPartLegendData = BODY_PART_OPTIONS.map(cat => ({
         name: cat,
@@ -1209,7 +1219,7 @@ const ChartsPage: React.FC = () => {
           <div className="modal-header">
             <div className="summary-title-group">
               <span className="summary-badge">MONTHLY SUMMARY</span>
-              <h3>{m.year}年{m.month}月 トレーニングサマリー</h3>
+              <h3>{m.year}年{m.month}月 サマリー</h3>
             </div>
             <button className="close-btn" onClick={() => setSelectedMonthModalData(null)}>
               <X size={20} />
@@ -1219,7 +1229,7 @@ const ChartsPage: React.FC = () => {
           {/* クイック統計バー */}
           <div className="summary-kpi-grid">
             <div className="summary-kpi-card">
-              <span className="kpi-label">実施日数</span>
+              <span className="kpi-label">日数</span>
               <div className="kpi-val-row">
                 <span className="kpi-value">{m.trainingDays}</span>
                 <span className="kpi-unit">日</span>
@@ -1229,21 +1239,21 @@ const ChartsPage: React.FC = () => {
               )}
             </div>
             <div className="summary-kpi-card">
-              <span className="kpi-label">総レップ数</span>
+              <span className="kpi-label">レップ数</span>
               <div className="kpi-val-row">
                 <span className="kpi-value">{m.totalReps.toLocaleString()}</span>
                 <span className="kpi-unit">reps</span>
               </div>
             </div>
             <div className="summary-kpi-card">
-              <span className="kpi-label">総セット数</span>
+              <span className="kpi-label">セット数</span>
               <div className="kpi-val-row">
                 <span className="kpi-value">{m.totalSets}</span>
                 <span className="kpi-unit">sets</span>
               </div>
             </div>
             <div className="summary-kpi-card">
-              <span className="kpi-label">総ボリューム</span>
+              <span className="kpi-label">ボリューム</span>
               <div className="kpi-val-row">
                 <span className="kpi-value">{m.totalVolume.toLocaleString()}</span>
                 <span className="kpi-unit">kg</span>
@@ -1294,6 +1304,8 @@ const ChartsPage: React.FC = () => {
                     <PieChart>
                       <Pie
                         data={m.pplData}
+                        startAngle={90}
+                        endAngle={-270}
                         innerRadius={22}
                         outerRadius={38}
                         paddingAngle={2}
@@ -1340,6 +1352,8 @@ const ChartsPage: React.FC = () => {
                     <PieChart>
                       <Pie
                         data={m.bodyPartData}
+                        startAngle={90}
+                        endAngle={-270}
                         innerRadius={22}
                         outerRadius={38}
                         paddingAngle={2}
@@ -1409,7 +1423,7 @@ const ChartsPage: React.FC = () => {
               <span className="section-sub-count">{m.exerciseSummaries.length} 種目</span>
             </div>
 
-            <div className="monthly-table-container">
+            <div className={`monthly-table-container summary-font-${summaryFontSize}`}>
               <table className="monthly-perf-table">
                 <thead>
                   <tr>

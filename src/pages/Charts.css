@@ -878,6 +878,71 @@
   gap: 16px;
 }
 
+.monthly-detail-modal .summary-title-group {
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+}
+
+.monthly-detail-modal .summary-title-group h3 {
+  font-size: 17px;
+  font-weight: 800;
+  color: var(--text-primary);
+  margin: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.monthly-detail-modal .summary-kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 6px;
+}
+
+.monthly-detail-modal .summary-kpi-card {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  padding: 8px 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  text-align: center;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.monthly-detail-modal .kpi-label {
+  font-size: 10.5px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  white-space: nowrap;
+  letter-spacing: -0.3px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.monthly-detail-modal .kpi-val-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: center;
+  gap: 2px;
+  white-space: nowrap;
+}
+
+.monthly-detail-modal .kpi-value {
+  font-size: 15px;
+  font-weight: 800;
+  color: var(--text-primary);
+}
+
+.monthly-detail-modal .kpi-unit {
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
 /* Top Ranks */
 .monthly-top-ranks {
   background: rgba(255, 255, 255, 0.02);
@@ -979,17 +1044,19 @@
   border: 1px solid var(--border-color);
   border-radius: 12px;
   background: rgba(0, 0, 0, 0.2);
+  -webkit-overflow-scrolling: touch;
 }
 
 .monthly-perf-table {
   width: 100%;
-  border-collapse: collapse;
+  border-collapse: separate;
+  border-spacing: 0;
   font-size: 12px;
   text-align: left;
 }
 
 .monthly-perf-table th {
-  background: rgba(255, 255, 255, 0.04);
+  background: #242426;
   color: var(--text-secondary);
   font-weight: 700;
   font-size: 11px;
@@ -1002,14 +1069,32 @@
   padding: 10px 12px;
   border-bottom: 1px solid rgba(255, 255, 255, 0.04);
   vertical-align: middle;
+  background: #1c1c1e;
 }
 
 .monthly-perf-table tbody tr:last-child td {
   border-bottom: none;
 }
 
+/* 1列目（種目名）のsticky固定 */
+.monthly-perf-table th:first-child {
+  position: sticky;
+  left: 0;
+  z-index: 3;
+  background: #28282b;
+  box-shadow: 3px 0 6px rgba(0, 0, 0, 0.35);
+}
+
+.monthly-perf-table td:first-child {
+  position: sticky;
+  left: 0;
+  z-index: 2;
+  background: #1c1c1e;
+  box-shadow: 3px 0 6px rgba(0, 0, 0, 0.35);
+}
+
 .cell-name-group {
-  min-width: 130px;
+  min-width: 135px;
 }
 
 .table-ex-title-row {
@@ -1076,6 +1161,37 @@
   font-weight: 600;
   white-space: nowrap;
 }
+
+/* Font Size Classes for Monthly Table (日別サマリー一覧と同じスケール) */
+/* Small (デフォルト: 12px基準) */
+.summary-font-small .monthly-perf-table { font-size: 12px; }
+.summary-font-small .table-ex-name { font-size: 12px; }
+.summary-font-small .cell-stat-val { font-size: 12px; }
+.summary-font-small .compact-chip { font-size: 9px; }
+.summary-font-small .diff-badge { font-size: 9.5px; }
+.summary-font-small .cell-meta { font-size: 11px; }
+.summary-font-small .monthly-perf-table th { font-size: 11px; padding: 8px 10px; }
+.summary-font-small .monthly-perf-table td { padding: 8px 10px; }
+
+/* Medium (14px基準) */
+.summary-font-medium .monthly-perf-table { font-size: 14px; }
+.summary-font-medium .table-ex-name { font-size: 14px; }
+.summary-font-medium .cell-stat-val { font-size: 14px; }
+.summary-font-medium .compact-chip { font-size: 10px; }
+.summary-font-medium .diff-badge { font-size: 11px; }
+.summary-font-medium .cell-meta { font-size: 13px; }
+.summary-font-medium .monthly-perf-table th { font-size: 12.5px; padding: 10px 12px; }
+.summary-font-medium .monthly-perf-table td { padding: 10px 12px; }
+
+/* Large (16px基準) */
+.summary-font-large .monthly-perf-table { font-size: 16px; }
+.summary-font-large .table-ex-name { font-size: 16px; }
+.summary-font-large .cell-stat-val { font-size: 16px; }
+.summary-font-large .compact-chip { font-size: 11px; }
+.summary-font-large .diff-badge { font-size: 12px; }
+.summary-font-large .cell-meta { font-size: 15px; }
+.summary-font-large .monthly-perf-table th { font-size: 14px; padding: 12px 14px; }
+.summary-font-large .monthly-perf-table td { padding: 12px 14px; }
 
 /* Charts Grid for Monthly Modal */
 .monthly-detail-modal .summary-charts-grid {

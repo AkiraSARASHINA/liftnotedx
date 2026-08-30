@@ -5,8 +5,6 @@ import {
   ShieldAlert, 
   Info, 
   Sliders, 
-  Moon, 
-  Sun, 
   Cloud, 
   CloudOff, 
   RefreshCw, 
@@ -28,7 +26,6 @@ import './Settings.css';
 
 const SettingsPage: React.FC = () => {
   const [highlightPB, setHighlightPB] = useState<boolean>(false);
-  const [theme, setTheme] = useState<'dark' | 'light'>('dark');
   const [summaryFontSize, setSummaryFontSize] = useState<'small' | 'medium' | 'large'>('small');
   const [calendarRingMode, setCalendarRingMode] = useState<'ppl' | 'bodypart' | 'none'>('ppl');
   
@@ -42,9 +39,6 @@ const SettingsPage: React.FC = () => {
   useEffect(() => {
     const stored = localStorage.getItem('settings_highlight_pb');
     setHighlightPB(stored === 'true');
-
-    const storedTheme = (localStorage.getItem('app_theme') as 'dark' | 'light') || 'dark';
-    setTheme(storedTheme);
 
     const storedFontSize = (localStorage.getItem('settings_summary_font_size') as 'small' | 'medium' | 'large') || 'small';
     setSummaryFontSize(storedFontSize);
@@ -76,13 +70,6 @@ const SettingsPage: React.FC = () => {
   const handleToggleHighlightPB = (checked: boolean) => {
     setHighlightPB(checked);
     localStorage.setItem('settings_highlight_pb', String(checked));
-  };
-
-  const handleToggleTheme = (isDark: boolean) => {
-    const newTheme = isDark ? 'dark' : 'light';
-    setTheme(newTheme);
-    localStorage.setItem('app_theme', newTheme);
-    document.documentElement.setAttribute('data-theme', newTheme);
   };
 
   const handleToggleAutoUpload = (checked: boolean) => {
@@ -232,24 +219,6 @@ const SettingsPage: React.FC = () => {
         <div className="settings-options">
           <div className="setting-item">
             <div className="setting-info">
-              <span className="setting-title-with-icon">
-                {theme === 'dark' ? <Moon size={16} /> : <Sun size={16} />}
-                <span>ダークモード</span>
-              </span>
-              <span className="setting-desc">アプリのテーマをダーク/ライトで切り替えます。</span>
-            </div>
-            <label className="toggle-switch">
-              <input 
-                type="checkbox" 
-                checked={theme === 'dark'} 
-                onChange={(e) => handleToggleTheme(e.target.checked)} 
-              />
-              <span className="slider"></span>
-            </label>
-          </div>
-
-          <div className="setting-item">
-            <div className="setting-info">
               <span className="setting-title">過去最高記録のハイライト</span>
               <span className="setting-desc">分析詳細画面で、過去最高を更新した日の記録をハイライトします。</span>
             </div>
@@ -265,8 +234,8 @@ const SettingsPage: React.FC = () => {
 
           <div className="setting-item">
             <div className="setting-info">
-              <span className="setting-title">日別サマリーの文字サイズ</span>
-              <span className="setting-desc">サマリー画面の種目一覧の表示サイズ（密度）を調整します。</span>
+              <span className="setting-title">サマリー画面の文字サイズ</span>
+              <span className="setting-desc">日別・月別サマリーの種目一覧・実績テーブルの文字サイズ（密度）を調整します。</span>
             </div>
             <div className="font-size-pills">
               {(['small', 'medium', 'large'] as const).map((size) => (

@@ -14,8 +14,8 @@ function App() {
   const [syncMessage, setSyncMessage] = useState('');
 
   useEffect(() => {
-    const savedTheme = localStorage.getItem('app_theme') || 'dark';
-    document.documentElement.setAttribute('data-theme', savedTheme);
+    localStorage.removeItem('app_theme');
+    document.documentElement.setAttribute('data-theme', 'dark');
 
     // Initialize synchronization manager
     initSyncManager().catch(err => {

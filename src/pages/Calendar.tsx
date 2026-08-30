@@ -53,7 +53,7 @@ const PPL_COLORS: Record<PPLCategory, string> = {
 const BODY_PART_COLORS: Record<BodyPartCategory, string> = {
   '胸': '#ff2d55',
   '背中': '#00a3ff',
-  '脚': '#34c759',
+  '脚': '#00e5a3',
   '肩': '#ff9500',
   '腕': '#af52de',
   'それ以外': '#8e8e93'
@@ -186,9 +186,10 @@ const CalendarPage: React.FC = () => {
     if (totalReps === 0) return null;
 
     const colorMap = mode === 'ppl' ? PPL_COLORS : BODY_PART_COLORS;
-    const entries = Object.entries(repsMap)
-      .filter(([_, val]) => val > 0)
-      .map(([name, value]) => ({ name, value }));
+    const options = mode === 'ppl' ? PPL_OPTIONS : BODY_PART_OPTIONS;
+    const entries = options
+      .map(name => ({ name, value: repsMap[name] || 0 }))
+      .filter(i => i.value > 0);
 
     if (entries.length === 0) return null;
     return generateConicGradient(entries, colorMap as any);
@@ -946,27 +947,27 @@ const CalendarPage: React.FC = () => {
             const totalReps = strengthExs.reduce((sum, ex) => sum + ex.sets.reduce((sSum, s) => sSum + s.reps, 0), 0);
             const exerciseCount = w.exercises.length;
 
-            // PPL集計（有酸素は除外）
+            // PPL集計（有酸素は除外、プッシュ→プル→レッグ→それ以外の順）
             const pplRepsMap: Record<string, number> = {};
             strengthExs.forEach(ex => {
               const cat = ex.ppl || 'それ以外';
               const reps = ex.sets.reduce((sSum, s) => sSum + s.reps, 0);
               pplRepsMap[cat] = (pplRepsMap[cat] || 0) + reps;
             });
-            const pplData = Object.entries(pplRepsMap)
-              .filter(([_, val]) => val > 0)
-              .map(([name, value]) => ({ name, value }));
+            const pplData = PPL_OPTIONS
+              .map(name => ({ name, value: pplRepsMap[name] || 0 }))
+              .filter(item => item.value > 0);
 
-            // 5分割部位集計（有酸素は除外）
+            // 5分割部位集計（有酸素は除外、胸→背中→脚→肩→腕→それ以外の順）
             const bodyPartRepsMap: Record<string, number> = {};
             strengthExs.forEach(ex => {
               const cat = ex.bodyPart || 'それ以外';
               const reps = ex.sets.reduce((sSum, s) => sSum + s.reps, 0);
               bodyPartRepsMap[cat] = (bodyPartRepsMap[cat] || 0) + reps;
             });
-            const bodyPartData = Object.entries(bodyPartRepsMap)
-              .filter(([_, val]) => val > 0)
-              .map(([name, value]) => ({ name, value }));
+            const bodyPartData = BODY_PART_OPTIONS
+              .map(name => ({ name, value: bodyPartRepsMap[name] || 0 }))
+              .filter(item => item.value > 0);
 
             return (
               <div key={w.date} className="timeline-item card" onClick={() => handleDateClick(w.date)}>
@@ -1132,32 +1133,32 @@ const CalendarPage: React.FC = () => {
 
                 const pbList = pbExerciseDetails.filter(p => p.isPB);
 
-                // PPL割合集計（筋トレ種目のみ、レップ数基準）
+                // PPL割合集計（筋トレ種目のみ、プッシュ→プル→レッグ→それ以外の順）
                 const pplRepsMap: Record<string, number> = {};
                 strengthExercises.forEach(ex => {
                   const cat = ex.ppl || 'それ以外';
                   const reps = ex.sets.reduce((sSum, s) => sSum + s.reps, 0);
                   pplRepsMap[cat] = (pplRepsMap[cat] || 0) + reps;
                 });
-                const pplData = Object.entries(pplRepsMap)
-                  .filter(([_, val]) => val > 0)
-                  .map(([name, value]) => ({ name, value }));
+                const pplData = PPL_OPTIONS
+                  .map(name => ({ name, value: pplRepsMap[name] || 0 }))
+                  .filter(item => item.value > 0);
 
                 const pplLegendList = PPL_OPTIONS.map(cat => ({
                   name: cat,
                   value: pplRepsMap[cat] || 0
                 }));
 
-                // 5分割部位割合集計（筋トレ種目のみ、レップ数基準）
+                // 5分割部位割合集計（筋トレ種目のみ、胸→背中→脚→肩→腕→それ以外の順）
                 const bodyPartRepsMap: Record<string, number> = {};
                 strengthExercises.forEach(ex => {
                   const cat = ex.bodyPart || 'それ以外';
                   const reps = ex.sets.reduce((sSum, s) => sSum + s.reps, 0);
                   bodyPartRepsMap[cat] = (bodyPartRepsMap[cat] || 0) + reps;
                 });
-                const bodyPartData = Object.entries(bodyPartRepsMap)
-                  .filter(([_, val]) => val > 0)
-                  .map(([name, value]) => ({ name, value }));
+                const bodyPartData = BODY_PART_OPTIONS
+                  .map(name => ({ name, value: bodyPartRepsMap[name] || 0 }))
+                  .filter(item => item.value > 0);
 
                 const bodyPartLegendList = BODY_PART_OPTIONS.map(cat => ({
                   name: cat,
@@ -1187,28 +1188,28 @@ const CalendarPage: React.FC = () => {
                     {/* クイック統計バー */}
                     <div className="summary-kpi-grid">
                       <div className="summary-kpi-card">
-                        <span className="kpi-label">総ボリューム</span>
+                        <span className="kpi-label">ボリューム</span>
                         <div className="kpi-val-row">
                           <span className="kpi-value">{totalVolume.toLocaleString()}</span>
                           <span className="kpi-unit">kg</span>
                         </div>
                       </div>
                       <div className="summary-kpi-card">
-                        <span className="kpi-label">総セット数</span>
+                        <span className="kpi-label">セット数</span>
                         <div className="kpi-val-row">
                           <span className="kpi-value">{totalSets}</span>
                           <span className="kpi-unit">sets</span>
                         </div>
                       </div>
                       <div className="summary-kpi-card">
-                        <span className="kpi-label">総レップ数</span>
+                        <span className="kpi-label">レップ数</span>
                         <div className="kpi-val-row">
                           <span className="kpi-value">{totalReps}</span>
                           <span className="kpi-unit">reps</span>
                         </div>
                       </div>
                       <div className="summary-kpi-card">
-                        <span className="kpi-label">種目数</span>
+                        <span className="kpi-label">種目</span>
                         <div className="kpi-val-row">
                           <span className="kpi-value">{exercises.length}</span>
                           <span className="kpi-unit">種目</span>
@@ -1257,6 +1258,8 @@ const CalendarPage: React.FC = () => {
                               <PieChart>
                                 <Pie
                                   data={pplData}
+                                  startAngle={90}
+                                  endAngle={-270}
                                   innerRadius={22}
                                   outerRadius={38}
                                   paddingAngle={2}
@@ -1303,6 +1306,8 @@ const CalendarPage: React.FC = () => {
                               <PieChart>
                                 <Pie
                                   data={bodyPartData}
+                                  startAngle={90}
+                                  endAngle={-270}
                                   innerRadius={22}
                                   outerRadius={38}
                                   paddingAngle={2}
