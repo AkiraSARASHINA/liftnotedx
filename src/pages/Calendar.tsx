@@ -5,6 +5,7 @@ import {
   saveWorkout, 
   deleteWorkout, 
   calculate1RM,
+  convertToKg,
   parseEquipmentTags,
   type Workout, 
   type Exercise, 
@@ -68,14 +69,27 @@ const CalendarPage: React.FC = () => {
   const [summaryFontSize, setSummaryFontSize] = useState<'small' | 'medium' | 'large'>('small');
   const [calendarRingMode, setCalendarRingMode] = useState<'ppl' | 'bodypart' | 'none'>('ppl');
   
+  // Date Picker Modal state (for moving day, exercise, or set)
+  const [datePickerModal, setDatePickerModal] = useState<{
+    isOpen: boolean;
+    title: string;
+    description?: string;
+    currentDate: string;
+    targetDate: string;
+    onConfirm: (newDate: string) => Promise<void>;
+  } | null>(null);
+
   // Edit/Add states
   const [editingExerciseIndex, setEditingExerciseIndex] = useState<number | null>(null);
   const [isAddingExercise, setIsAddingExercise] = useState(false);
   const [editForm, setEditForm] = useState<Exercise>({
     name: '',
     equipment: '',
+    isCardio: false,
+    calories: undefined,
     ppl: undefined,
     bodyPart: undefined,
+    unit: 'kg',
     isBodyweight: false,
     note: '',
     sets: [{ weight: 0, reps: 0 }]
@@ -288,7 +302,147 @@ const CalendarPage: React.FC = () => {
     setIsAddingExercise(false);
   };
 
-  // --- Edit/Delete Logic ---
+  // --- Edit/Delete & Date Moving Logic ---
+
+  // 1. その日の記録全体を別の日に移動・統合
+  const openMoveDayModal = () => {
+    if (!selectedDateStr || !selectedWorkout) return;
+    setDatePickerModal({
+      isOpen: true,
+      title: 'この日の記録全体を別の日に移動',
+      description: `${selectedDateStr} の全${selectedWorkout.exercises.length}種目の記録を別の日付へ移動します。移動先に記録がある場合は自動的に統合されます。`,
+      currentDate: selectedDateStr,
+      targetDate: selectedDateStr,
+      onConfirm: async (newDate: string) => {
+        if (newDate === selectedDateStr) return;
+        const existing = await getWorkoutByDate(newDate);
+        if (existing && existing.exercises && existing.exercises.length > 0) {
+          if (!window.confirm(`${newDate} には既に記録（${existing.exercises.length}種目）が存在します。\nこの日の全種目を末尾に追加して統合（マージ）しますか？`)) {
+            return;
+          }
+          const mergedWorkout: Workout = {
+            ...existing,
+            exercises: [...existing.exercises, ...selectedWorkout.exercises]
+          };
+          await saveWorkout(mergedWorkout);
+        } else {
+          const newWorkout: Workout = {
+            ...selectedWorkout,
+            date: newDate
+          };
+          await saveWorkout(newWorkout);
+        }
+        await deleteWorkout(selectedDateStr);
+        setSelectedDateStr(newDate);
+        const updated = await getWorkoutByDate(newDate);
+        setSelectedWorkout(updated || null);
+        await loadWorkouts();
+        await loadUniqueNames();
+        setDatePickerModal(null);
+      }
+    });
+  };
+
+  // 2. ある種目の記録を別の日に移動
+  const openMoveExerciseModal = (index: number) => {
+    if (!selectedWorkout || !selectedDateStr) return;
+    const targetEx = selectedWorkout.exercises[index];
+    setDatePickerModal({
+      isOpen: true,
+      title: `「${targetEx.name}」を別の日に移動`,
+      description: `「${targetEx.name}（${targetEx.sets.length}セット）${targetEx.equipment ? ` [${targetEx.equipment}]` : ''}」を別の日付へ移動します。`,
+      currentDate: selectedDateStr,
+      targetDate: selectedDateStr,
+      onConfirm: async (newDate: string) => {
+        if (newDate === selectedDateStr) return;
+        const targetWorkout = (await getWorkoutByDate(newDate)) || {
+          date: newDate,
+          exercises: [],
+          updatedAt: ''
+        };
+        targetWorkout.exercises.push(targetEx);
+        await saveWorkout(targetWorkout);
+
+        const remaining = [...selectedWorkout.exercises];
+        remaining.splice(index, 1);
+        if (remaining.length === 0) {
+          await deleteWorkout(selectedDateStr);
+          handleCloseModal();
+        } else {
+          const updatedWorkout = { ...selectedWorkout, exercises: remaining };
+          await saveWorkout(updatedWorkout);
+          setSelectedWorkout(updatedWorkout);
+        }
+        await loadWorkouts();
+        await loadUniqueNames();
+        setDatePickerModal(null);
+      }
+    });
+  };
+
+  // 3. あるセットの記録を別の日に移動
+  const openMoveSetModal = (setIndex: number) => {
+    if (!selectedDateStr) return;
+    const targetSet = editForm.sets[setIndex];
+    const setLabel = `${targetSet.weight !== undefined && targetSet.weight !== null ? targetSet.weight : 0}kg × ${targetSet.reps || 0}回`;
+    setDatePickerModal({
+      isOpen: true,
+      title: `セット #${setIndex + 1}（${setLabel}）を別の日に移動`,
+      description: `「${editForm.name || 'この種目'}」のセット #${setIndex + 1} を別の日付へ移動します。移動先に同名・同器具の種目があればセットが追加されます。`,
+      currentDate: selectedDateStr,
+      targetDate: selectedDateStr,
+      onConfirm: async (newDate: string) => {
+        if (newDate === selectedDateStr) return;
+        const targetWorkout = (await getWorkoutByDate(newDate)) || {
+          date: newDate,
+          exercises: [],
+          updatedAt: ''
+        };
+
+        // 移動先に同一種目（名前＆器具が一致）があるか探索
+        const matchEx = targetWorkout.exercises.find(
+          e => e.name.trim() === editForm.name.trim() && (e.equipment || '').trim() === (editForm.equipment || '').trim()
+        );
+        if (matchEx) {
+          matchEx.sets.push(targetSet);
+        } else {
+          targetWorkout.exercises.push({
+            ...editForm,
+            sets: [targetSet]
+          });
+        }
+        await saveWorkout(targetWorkout);
+
+        // 現在の編集フォームから該当セットを削除
+        const remainingSets = [...editForm.sets];
+        remainingSets.splice(setIndex, 1);
+        if (remainingSets.length === 0) {
+          // セットが0になったら種目自体を削除
+          if (editingExerciseIndex !== null && selectedWorkout) {
+            const remainingExs = [...selectedWorkout.exercises];
+            remainingExs.splice(editingExerciseIndex, 1);
+            if (remainingExs.length === 0) {
+              await deleteWorkout(selectedDateStr);
+              handleCloseModal();
+            } else {
+              await saveWorkout({ ...selectedWorkout, exercises: remainingExs });
+              setSelectedWorkout({ ...selectedWorkout, exercises: remainingExs });
+              setEditingExerciseIndex(null);
+              setIsAddingExercise(false);
+            }
+          } else {
+            setEditingExerciseIndex(null);
+            setIsAddingExercise(false);
+          }
+        } else {
+          setEditForm({ ...editForm, sets: remainingSets });
+        }
+        await loadWorkouts();
+        await loadUniqueNames();
+        setDatePickerModal(null);
+      }
+    });
+  };
 
   const handleDeleteDay = async () => {
     if (!window.confirm('この日の記録をすべて削除します。この操作は取り消せません。本当に実行しますか？')) return;
@@ -317,7 +471,13 @@ const CalendarPage: React.FC = () => {
     if (!selectedWorkout) return;
     const ex = selectedWorkout.exercises[index];
     setEditingExerciseIndex(index);
-    setEditForm({ ...ex, sets: [...ex.sets.map(s => ({ ...s }))] });
+    setEditForm({ 
+      ...ex, 
+      isCardio: !!ex.isCardio,
+      calories: ex.calories,
+      unit: ex.unit || 'kg', 
+      sets: [...(ex.sets || []).map(s => ({ ...s }))] 
+    });
     loadUniqueNames();
   };
 
@@ -326,8 +486,11 @@ const CalendarPage: React.FC = () => {
     setEditForm({
       name: '',
       equipment: '',
+      isCardio: false,
+      calories: undefined,
       ppl: undefined,
       bodyPart: undefined,
+      unit: 'kg',
       isBodyweight: false,
       note: '',
       sets: [{ weight: 0, reps: 0 }]
@@ -341,20 +504,31 @@ const CalendarPage: React.FC = () => {
       if (!window.confirm('既存の種目データを修正して上書き保存します。よろしいですか？')) return;
     }
 
+    const cleanedForm: Exercise = editForm.isCardio ? {
+      ...editForm,
+      isBodyweight: false,
+      unit: undefined,
+      ppl: undefined,
+      bodyPart: undefined,
+      sets: []
+    } : {
+      ...editForm
+    };
+
     if (!selectedWorkout || !selectedDateStr) {
       // Manual add to a day that doesn't have a record yet
       const newWorkout: Workout = {
         date: selectedDateStr,
-        exercises: [editForm],
+        exercises: [cleanedForm],
         updatedAt: '', // saveWorkout 内で自動設定される
       };
       await saveWorkout(newWorkout);
     } else {
       const updatedExercises = [...selectedWorkout.exercises];
       if (editingExerciseIndex !== null) {
-        updatedExercises[editingExerciseIndex] = editForm;
+        updatedExercises[editingExerciseIndex] = cleanedForm;
       } else {
-        updatedExercises.push(editForm);
+        updatedExercises.push(cleanedForm);
       }
       await saveWorkout({ ...selectedWorkout, exercises: updatedExercises });
     }
@@ -498,13 +672,33 @@ const CalendarPage: React.FC = () => {
       </div>
       
       <div className="form-group">
+        <label>種目タイプ</label>
+        <div className="exercise-type-toggle">
+          <button
+            type="button"
+            className={`type-toggle-btn ${!editForm.isCardio ? 'active' : ''}`}
+            onClick={() => setEditForm({ ...editForm, isCardio: false })}
+          >
+            🏋️ 筋トレ
+          </button>
+          <button
+            type="button"
+            className={`type-toggle-btn cardio ${editForm.isCardio ? 'active' : ''}`}
+            onClick={() => setEditForm({ ...editForm, isCardio: true })}
+          >
+            🏃 有酸素運動
+          </button>
+        </div>
+      </div>
+      
+      <div className="form-group">
         <label>種目名</label>
         <input 
           type="text" 
           list="exercise-options"
           value={editForm.name} 
           onChange={e => setEditForm({ ...editForm, name: e.target.value })}
-          placeholder="例: ベンチプレス"
+          placeholder={editForm.isCardio ? "例: ランニング、エアロバイク" : "例: ベンチプレス"}
         />
         <datalist id="exercise-options">
           {uniqueNames.map(name => <option key={name} value={name} />)}
@@ -512,98 +706,156 @@ const CalendarPage: React.FC = () => {
       </div>
 
       <div className="form-group">
-        <label>マシン・器具 / タグ（複数可）</label>
+        <label>マシン・器具 / タグ（オプショナル）</label>
         <input 
           type="text" 
           list="equipment-options"
           value={editForm.equipment || ''} 
           onChange={e => setEditForm({ ...editForm, equipment: e.target.value })}
-          placeholder="例: ノーチラス, 大円筋（カンマ区切りで複数可）"
+          placeholder="例: トレッドミル、ライフフィットネス"
         />
         <datalist id="equipment-options">
           {uniqueEquipments.map(eq => <option key={eq} value={eq} />)}
         </datalist>
       </div>
 
-      <div className="form-group">
-        <label>PPL 分類</label>
-        <div className="category-pill-group">
-          {PPL_OPTIONS.map(opt => (
-            <button
-              key={opt}
-              type="button"
-              className={`category-pill ${editForm.ppl === opt ? 'active' : ''}`}
-              onClick={() => setEditForm({ ...editForm, ppl: editForm.ppl === opt ? undefined : opt })}
-            >
-              {opt}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      <div className="form-group">
-        <label>5分割法（部位）</label>
-        <div className="category-pill-group">
-          {BODY_PART_OPTIONS.map(opt => (
-            <button
-              key={opt}
-              type="button"
-              className={`category-pill ${editForm.bodyPart === opt ? 'active' : ''}`}
-              onClick={() => setEditForm({ ...editForm, bodyPart: editForm.bodyPart === opt ? undefined : opt })}
-            >
-              {opt}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      <div className="form-group row">
-        <label>
-          <input 
-            type="checkbox" 
-            checked={editForm.isBodyweight} 
-            onChange={e => setEditForm({ ...editForm, isBodyweight: e.target.checked })} 
-          />
-          自重種目
-        </label>
-      </div>
-
-      <div className="form-group">
-        <label>セット内容</label>
-        {editForm.sets.map((set, i) => (
-          <div key={i} className="edit-set-row">
-            <span className="set-label">{i + 1}</span>
+      {editForm.isCardio ? (
+        /* --- 有酸素運動専用の入力欄 --- */
+        <div className="form-group cardio-calories-group">
+          <label>消費カロリー (kcal)</label>
+          <div className="calorie-input-wrapper">
             <input 
               type="number" 
-              value={set.weight !== undefined && set.weight !== null ? set.weight || '' : ''} 
-              onChange={e => handleSetChange(i, 'weight', parseFloat(e.target.value) || 0)}
-              placeholder={editForm.isBodyweight ? '+kg' : 'kg'}
+              value={editForm.calories !== undefined && editForm.calories !== null ? editForm.calories || '' : ''} 
+              onChange={e => setEditForm({ ...editForm, calories: parseFloat(e.target.value) || 0 })}
+              placeholder="例: 300"
+              className="calorie-input"
             />
-            <input 
-              type="number" 
-              value={set.reps || ''} 
-              onChange={e => handleSetChange(i, 'reps', parseInt(e.target.value) || 0)}
-              placeholder="回数"
-            />
-            {!editForm.isBodyweight && set.weight && set.reps && editForm.bodyPart ? (
-              (() => {
-                const oneRM = calculate1RM(set.weight, set.reps, editForm.bodyPart);
-                return oneRM !== undefined ? (
-                  <span className="edit-set-1rm" title={`${editForm.bodyPart}向け 推定1RM`}>
-                    1RM: {oneRM}kg
-                  </span>
-                ) : null;
-              })()
-            ) : null}
-            <button className="remove-set-btn" onClick={() => removeSet(i)}>
-              <X size={14} />
+            <span className="calorie-unit">kcal</span>
+          </div>
+        </div>
+      ) : (
+        /* --- 筋トレ専用の入力欄 --- */
+        <>
+          <div className="form-group">
+            <label>PPL 分類</label>
+            <div className="category-pill-group">
+              {PPL_OPTIONS.map(opt => (
+                <button
+                  key={opt}
+                  type="button"
+                  className={`category-pill ${editForm.ppl === opt ? 'active' : ''}`}
+                  onClick={() => setEditForm({ ...editForm, ppl: editForm.ppl === opt ? undefined : opt })}
+                >
+                  {opt}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="form-group">
+            <label>5分割法（部位）</label>
+            <div className="category-pill-group">
+              {BODY_PART_OPTIONS.map(opt => (
+                <button
+                  key={opt}
+                  type="button"
+                  className={`category-pill ${editForm.bodyPart === opt ? 'active' : ''}`}
+                  onClick={() => setEditForm({ ...editForm, bodyPart: editForm.bodyPart === opt ? undefined : opt })}
+                >
+                  {opt}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="form-row-double">
+            <div className="form-group row">
+              <label>
+                <input 
+                  type="checkbox" 
+                  checked={editForm.isBodyweight} 
+                  onChange={e => setEditForm({ ...editForm, isBodyweight: e.target.checked })} 
+                />
+                自重種目
+              </label>
+            </div>
+
+            <div className="form-group row unit-group">
+              <label className="unit-label">重量単位:</label>
+              <div className="unit-toggle-group">
+                <button
+                  type="button"
+                  className={`unit-toggle-btn ${(!editForm.unit || editForm.unit === 'kg') ? 'active' : ''}`}
+                  onClick={() => setEditForm({ ...editForm, unit: 'kg' })}
+                >
+                  kg
+                </button>
+                <button
+                  type="button"
+                  className={`unit-toggle-btn ${editForm.unit === 'lbs' ? 'active' : ''}`}
+                  onClick={() => setEditForm({ ...editForm, unit: 'lbs' })}
+                >
+                  LB (ポンド)
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <div className="form-group">
+            <label>セット内容</label>
+            {editForm.sets.map((set, i) => (
+              <div key={i} className="edit-set-row">
+                <span className="set-label">{i + 1}</span>
+                <input 
+                  type="number" 
+                  value={set.weight !== undefined && set.weight !== null ? set.weight || '' : ''} 
+                  onChange={e => handleSetChange(i, 'weight', parseFloat(e.target.value) || 0)}
+                  placeholder={editForm.isBodyweight ? (editForm.unit === 'lbs' ? '+lbs' : '+kg') : (editForm.unit === 'lbs' ? 'lbs' : 'kg')}
+                />
+                <input 
+                  type="number" 
+                  value={set.reps || ''} 
+                  onChange={e => handleSetChange(i, 'reps', parseInt(e.target.value) || 0)}
+                  placeholder="回数"
+                />
+                {!editForm.isBodyweight && set.weight && set.reps && editForm.bodyPart ? (
+                  (() => {
+                    const oneRM = calculate1RM(set.weight, set.reps, editForm.bodyPart);
+                    const currentUnit = editForm.unit === 'lbs' ? 'lbs' : 'kg';
+                    return oneRM !== undefined ? (
+                      <span className="edit-set-1rm" title={`${editForm.bodyPart}向け 推定1RM`}>
+                        1RM: {oneRM}{currentUnit}
+                      </span>
+                    ) : null;
+                  })()
+                ) : null}
+                <div className="set-action-btns">
+                  <button 
+                    type="button" 
+                    className="move-set-btn" 
+                    onClick={() => openMoveSetModal(i)} 
+                    title="このセットを別の日付へ移動"
+                  >
+                    <CalendarIcon size={14} />
+                  </button>
+                  <button 
+                    type="button" 
+                    className="remove-set-btn" 
+                    onClick={() => removeSet(i)}
+                    title="このセットを削除"
+                  >
+                    <X size={14} />
+                  </button>
+                </div>
+              </div>
+            ))}
+            <button className="add-set-btn" onClick={addSet}>
+              <Plus size={14} /> セットを追加
             </button>
           </div>
-        ))}
-        <button className="add-set-btn" onClick={addSet}>
-          <Plus size={14} /> セットを追加
-        </button>
-      </div>
+        </>
+      )}
 
       <div className="form-group">
         <label>備考</label>
@@ -689,13 +941,14 @@ const CalendarPage: React.FC = () => {
         }}
       >
           {sortedWorkouts.map((w) => {
-            const totalSets = w.exercises.reduce((sum, ex) => sum + ex.sets.length, 0);
-            const totalReps = w.exercises.reduce((sum, ex) => sum + ex.sets.reduce((sSum, s) => sSum + s.reps, 0), 0);
+            const strengthExs = w.exercises.filter(e => !e.isCardio);
+            const totalSets = strengthExs.reduce((sum, ex) => sum + ex.sets.length, 0);
+            const totalReps = strengthExs.reduce((sum, ex) => sum + ex.sets.reduce((sSum, s) => sSum + s.reps, 0), 0);
             const exerciseCount = w.exercises.length;
 
-            // PPL集計
+            // PPL集計（有酸素は除外）
             const pplRepsMap: Record<string, number> = {};
-            w.exercises.forEach(ex => {
+            strengthExs.forEach(ex => {
               const cat = ex.ppl || 'それ以外';
               const reps = ex.sets.reduce((sSum, s) => sSum + s.reps, 0);
               pplRepsMap[cat] = (pplRepsMap[cat] || 0) + reps;
@@ -704,9 +957,9 @@ const CalendarPage: React.FC = () => {
               .filter(([_, val]) => val > 0)
               .map(([name, value]) => ({ name, value }));
 
-            // 5分割部位集計
+            // 5分割部位集計（有酸素は除外）
             const bodyPartRepsMap: Record<string, number> = {};
-            w.exercises.forEach(ex => {
+            strengthExs.forEach(ex => {
               const cat = ex.bodyPart || 'それ以外';
               const reps = ex.sets.reduce((sSum, s) => sSum + s.reps, 0);
               bodyPartRepsMap[cat] = (bodyPartRepsMap[cat] || 0) + reps;
@@ -782,20 +1035,40 @@ const CalendarPage: React.FC = () => {
             {modalView === 'summary' && selectedWorkout && selectedWorkout.exercises && selectedWorkout.exercises.length > 0 ? (
               (() => {
                 const exercises = selectedWorkout.exercises;
-                const totalVolume = exercises.reduce((sum, ex) => sum + ex.sets.reduce((sSum, s) => sSum + (s.weight || 0) * s.reps, 0), 0);
-                const totalSets = exercises.reduce((sum, ex) => sum + ex.sets.length, 0);
-                const totalReps = exercises.reduce((sum, ex) => sum + ex.sets.reduce((sSum, s) => sSum + s.reps, 0), 0);
+                const strengthExercises = exercises.filter(ex => !ex.isCardio);
+                const totalVolume = Math.round(strengthExercises.reduce((sum, ex) => sum + ex.sets.reduce((sSum, s) => sSum + convertToKg(s.weight, ex.unit) * s.reps, 0), 0) * 10) / 10;
+                const totalSets = strengthExercises.reduce((sum, ex) => sum + ex.sets.length, 0);
+                const totalReps = strengthExercises.reduce((sum, ex) => sum + ex.sets.reduce((sSum, s) => sSum + s.reps, 0), 0);
 
                 // --- 自己ベスト（PB🔥）判定ロジック ---
                 const pastWorkouts = allWorkouts.filter(w => w.date < selectedDateStr);
                 const pbExerciseDetails = exercises.map(ex => {
-                  const todayMaxWeight = Math.max(...ex.sets.map(s => s.weight || 0));
-                  const todayMax1RM = ex.sets.reduce((max, s) => {
+                  if (ex.isCardio) {
+                    // 有酸素運動のPB判定（消費カロリー）
+                    const todayCalories = ex.calories || 0;
+                    const pastCaloriesList: number[] = [];
+                    pastWorkouts.forEach(pw => {
+                      pw.exercises.filter(pe => pe.name === ex.name && pe.isCardio).forEach(pe => {
+                        if (pe.calories) pastCaloriesList.push(pe.calories);
+                      });
+                    });
+                    const hasPastHistory = pastCaloriesList.length > 0;
+                    const pastMaxCalories = hasPastHistory ? Math.max(...pastCaloriesList) : 0;
+                    const reasons: string[] = [];
+                    if (hasPastHistory && todayCalories > pastMaxCalories && todayCalories > 0) {
+                      reasons.push(`消費カロリー (${pastMaxCalories}kcal → ${todayCalories}kcal)`);
+                    }
+                    return { name: ex.name, isPB: reasons.length > 0, reasons };
+                  }
+
+                  // 筋トレ種目のPB判定
+                  const todayMaxWeight = Math.round(Math.max(...ex.sets.map(s => convertToKg(s.weight, ex.unit))) * 10) / 10;
+                  const todayMax1RM = Math.round(ex.sets.reduce((max, s) => {
                     const oneRM = !ex.isBodyweight ? (s.estimated1RM || calculate1RM(s.weight, s.reps, ex.bodyPart) || 0) : 0;
-                    return Math.max(max, oneRM);
-                  }, 0);
+                    return Math.max(max, convertToKg(oneRM, ex.unit));
+                  }, 0) * 10) / 10;
                   const todayTotalReps = ex.sets.reduce((sum, s) => sum + s.reps, 0);
-                  const todayTotalVolume = ex.sets.reduce((sum, s) => sum + (s.weight || 0) * s.reps, 0);
+                  const todayTotalVolume = Math.round(ex.sets.reduce((sum, s) => sum + convertToKg(s.weight, ex.unit) * s.reps, 0) * 10) / 10;
 
                   // 過去の同種目セッションを集計（日単位でMAX重量、MAX 1RM、総レップ数、総ボリューム）
                   const pastSessions: {
@@ -806,15 +1079,15 @@ const CalendarPage: React.FC = () => {
                   }[] = [];
 
                   pastWorkouts.forEach(pw => {
-                    const matchingExs = pw.exercises.filter(pe => pe.name === ex.name);
+                    const matchingExs = pw.exercises.filter(pe => pe.name === ex.name && !pe.isCardio);
                     matchingExs.forEach(pe => {
-                      const pMaxWeight = Math.max(...pe.sets.map(s => s.weight || 0));
-                      const pMax1RM = pe.sets.reduce((max, s) => {
+                      const pMaxWeight = Math.round(Math.max(...pe.sets.map(s => convertToKg(s.weight, pe.unit))) * 10) / 10;
+                      const pMax1RM = Math.round(pe.sets.reduce((max, s) => {
                         const oneRM = !pe.isBodyweight ? (s.estimated1RM || calculate1RM(s.weight, s.reps, pe.bodyPart) || 0) : 0;
-                        return Math.max(max, oneRM);
-                      }, 0);
+                        return Math.max(max, convertToKg(oneRM, pe.unit));
+                      }, 0) * 10) / 10;
                       const pTotalReps = pe.sets.reduce((sum, s) => sum + s.reps, 0);
-                      const pTotalVolume = pe.sets.reduce((sum, s) => sum + (s.weight || 0) * s.reps, 0);
+                      const pTotalVolume = Math.round(pe.sets.reduce((sum, s) => sum + convertToKg(s.weight, pe.unit) * s.reps, 0) * 10) / 10;
 
                       pastSessions.push({
                         maxWeight: pMaxWeight,
@@ -859,9 +1132,9 @@ const CalendarPage: React.FC = () => {
 
                 const pbList = pbExerciseDetails.filter(p => p.isPB);
 
-                // PPL割合集計（レップ数基準）
+                // PPL割合集計（筋トレ種目のみ、レップ数基準）
                 const pplRepsMap: Record<string, number> = {};
-                exercises.forEach(ex => {
+                strengthExercises.forEach(ex => {
                   const cat = ex.ppl || 'それ以外';
                   const reps = ex.sets.reduce((sSum, s) => sSum + s.reps, 0);
                   pplRepsMap[cat] = (pplRepsMap[cat] || 0) + reps;
@@ -875,9 +1148,9 @@ const CalendarPage: React.FC = () => {
                   value: pplRepsMap[cat] || 0
                 }));
 
-                // 5分割部位割合集計（レップ数基準）
+                // 5分割部位割合集計（筋トレ種目のみ、レップ数基準）
                 const bodyPartRepsMap: Record<string, number> = {};
-                exercises.forEach(ex => {
+                strengthExercises.forEach(ex => {
                   const cat = ex.bodyPart || 'それ以外';
                   const reps = ex.sets.reduce((sSum, s) => sSum + s.reps, 0);
                   bodyPartRepsMap[cat] = (bodyPartRepsMap[cat] || 0) + reps;
@@ -906,9 +1179,6 @@ const CalendarPage: React.FC = () => {
                         >
                           <Edit2 size={15} />
                           <span>編集する</span>
-                        </button>
-                        <button className="icon-btn delete-day" onClick={handleDeleteDay} title="日の削除">
-                          <Trash2 size={18} />
                         </button>
                         <button className="close-btn" onClick={handleCloseModal}><X size={20} /></button>
                       </div>
@@ -1090,52 +1360,68 @@ const CalendarPage: React.FC = () => {
                               </span>
                             )}
                             <div className="compact-category-chips">
-                              {ex.ppl && (
-                                <span 
-                                  className="compact-chip ppl"
-                                  style={{
-                                    color: PPL_COLORS[ex.ppl] || '#8e8e93',
-                                    background: `${PPL_COLORS[ex.ppl] || '#8e8e93'}18`,
-                                    borderColor: `${PPL_COLORS[ex.ppl] || '#8e8e93'}40`
-                                  }}
-                                >
-                                  {ex.ppl}
-                                </span>
-                              )}
-                              {ex.bodyPart && (
-                                <span 
-                                  className="compact-chip bodypart"
-                                  style={{
-                                    color: BODY_PART_COLORS[ex.bodyPart] || '#8e8e93',
-                                    background: `${BODY_PART_COLORS[ex.bodyPart] || '#8e8e93'}18`,
-                                    borderColor: `${BODY_PART_COLORS[ex.bodyPart] || '#8e8e93'}40`
-                                  }}
-                                >
-                                  {ex.bodyPart}
-                                </span>
+                              {ex.isCardio ? (
+                                <span className="compact-chip cardio">🏃 有酸素</span>
+                              ) : (
+                                <>
+                                  {ex.ppl && (
+                                    <span 
+                                      className="compact-chip ppl"
+                                      style={{
+                                        color: PPL_COLORS[ex.ppl] || '#8e8e93',
+                                        background: `${PPL_COLORS[ex.ppl] || '#8e8e93'}18`,
+                                        borderColor: `${PPL_COLORS[ex.ppl] || '#8e8e93'}40`
+                                      }}
+                                    >
+                                      {ex.ppl}
+                                    </span>
+                                  )}
+                                  {ex.bodyPart && (
+                                    <span 
+                                      className="compact-chip bodypart"
+                                      style={{
+                                        color: BODY_PART_COLORS[ex.bodyPart] || '#8e8e93',
+                                        background: `${BODY_PART_COLORS[ex.bodyPart] || '#8e8e93'}18`,
+                                        borderColor: `${BODY_PART_COLORS[ex.bodyPart] || '#8e8e93'}40`
+                                      }}
+                                    >
+                                      {ex.bodyPart}
+                                    </span>
+                                  )}
+                                </>
                               )}
                             </div>
                           </div>
-                          <div className="compact-sets-row">
-                            {ex.sets.map((set, si) => {
-                              const oneRM = !ex.isBodyweight 
-                                ? (set.estimated1RM || calculate1RM(set.weight, set.reps, ex.bodyPart)) 
-                                : undefined;
-                              
-                              let setVal = `${set.weight}kg×${set.reps}`;
-                              if (ex.isBodyweight) {
-                                setVal = set.weight && set.weight > 0 ? `自重(+${set.weight}k)×${set.reps}` : `自重×${set.reps}`;
-                              }
+                          {ex.isCardio ? (
+                            <div className="compact-cardio-row">
+                              <span className="cardio-calorie-pill">
+                                🔥 {ex.calories ? `${ex.calories} kcal` : 'カロリー未記録'}
+                              </span>
+                            </div>
+                          ) : (
+                            <div className="compact-sets-row">
+                              {ex.sets.map((set, si) => {
+                                const oneRM = !ex.isBodyweight 
+                                  ? (set.estimated1RM || calculate1RM(set.weight, set.reps, ex.bodyPart)) 
+                                  : undefined;
+                                
+                                const unitLabel = ex.unit === 'lbs' ? 'lbs' : 'kg';
+                                const unitShort = ex.unit === 'lbs' ? 'lb' : 'k';
+                                let setVal = `${set.weight}${unitLabel}×${set.reps}`;
+                                if (ex.isBodyweight) {
+                                  setVal = set.weight && set.weight > 0 ? `自重(+${set.weight}${unitShort})×${set.reps}` : `自重×${set.reps}`;
+                                }
 
-                              return (
-                                <span key={si} className="compact-set-pill">
-                                  <span className="set-idx">{si + 1}</span>
-                                  <span className="set-data">{setVal}</span>
-                                  {oneRM !== undefined && <span className="set-1rm-mini">{oneRM}k</span>}
-                                </span>
-                              );
-                            })}
-                          </div>
+                                return (
+                                  <span key={si} className="compact-set-pill">
+                                    <span className="set-idx">{si + 1}</span>
+                                    <span className="set-data">{setVal}</span>
+                                    {oneRM !== undefined && <span className="set-1rm-mini">{oneRM}{unitShort}</span>}
+                                  </span>
+                                );
+                              })}
+                            </div>
+                          )}
                           {ex.note && <div className="compact-note"><Info size={11} /> {ex.note}</div>}
                         </div>
                       ))}
@@ -1158,6 +1444,17 @@ const CalendarPage: React.FC = () => {
                       </button>
                     )}
                     <h3>{selectedDateStr} ({getDayOfWeek(selectedDateStr)})</h3>
+                    {selectedWorkout && selectedWorkout.exercises && selectedWorkout.exercises.length > 0 && !isAddingExercise && editingExerciseIndex === null && (
+                      <button 
+                        type="button"
+                        className="btn-text-sm move-day-btn" 
+                        onClick={openMoveDayModal}
+                        title="この日の記録全体を別の日付へ移動"
+                      >
+                        <CalendarIcon size={13} />
+                        <span>日付変更</span>
+                      </button>
+                    )}
                   </div>
                   <div className="header-actions">
                     {selectedWorkout && selectedWorkout.exercises && selectedWorkout.exercises.length > 0 && (
@@ -1182,64 +1479,86 @@ const CalendarPage: React.FC = () => {
                                 {parseEquipmentTags(ex.equipment).map((tag, ti) => (
                                   <span key={ti} className="equipment-chip">{tag}</span>
                                 ))}
-                                {ex.ppl && (
-                                  <span 
-                                    className="category-chip ppl"
-                                    style={{
-                                      color: PPL_COLORS[ex.ppl] || '#8e8e93',
-                                      background: `${PPL_COLORS[ex.ppl] || '#8e8e93'}18`,
-                                      borderColor: `${PPL_COLORS[ex.ppl] || '#8e8e93'}40`
-                                    }}
-                                  >
-                                    {ex.ppl}
-                                  </span>
-                                )}
-                                {ex.bodyPart && (
-                                  <span 
-                                    className="category-chip bodypart"
-                                    style={{
-                                      color: BODY_PART_COLORS[ex.bodyPart] || '#8e8e93',
-                                      background: `${BODY_PART_COLORS[ex.bodyPart] || '#8e8e93'}18`,
-                                      borderColor: `${BODY_PART_COLORS[ex.bodyPart] || '#8e8e93'}40`
-                                    }}
-                                  >
-                                    {ex.bodyPart}
-                                  </span>
+                                {ex.isCardio ? (
+                                  <span className="category-chip cardio">🏃 有酸素</span>
+                                ) : (
+                                  <>
+                                    {ex.ppl && (
+                                      <span 
+                                        className="category-chip ppl"
+                                        style={{
+                                          color: PPL_COLORS[ex.ppl] || '#8e8e93',
+                                          background: `${PPL_COLORS[ex.ppl] || '#8e8e93'}18`,
+                                          borderColor: `${PPL_COLORS[ex.ppl] || '#8e8e93'}40`
+                                        }}
+                                      >
+                                        {ex.ppl}
+                                      </span>
+                                    )}
+                                    {ex.bodyPart && (
+                                      <span 
+                                        className="category-chip bodypart"
+                                        style={{
+                                          color: BODY_PART_COLORS[ex.bodyPart] || '#8e8e93',
+                                          background: `${BODY_PART_COLORS[ex.bodyPart] || '#8e8e93'}18`,
+                                          borderColor: `${BODY_PART_COLORS[ex.bodyPart] || '#8e8e93'}40`
+                                        }}
+                                      >
+                                        {ex.bodyPart}
+                                      </span>
+                                    )}
+                                  </>
                                 )}
                               </div>
                               <div className="exercise-actions">
-                                <button className="icon-btn edit" onClick={() => startEdit(i)}><Edit2 size={16} /></button>
-                                <button className="icon-btn delete" onClick={() => handleDeleteExercise(i)}><Trash2 size={16} /></button>
+                                <button 
+                                  className="icon-btn move" 
+                                  onClick={() => openMoveExerciseModal(i)} 
+                                  title="この種目を別の日付へ移動"
+                                >
+                                  <CalendarIcon size={16} />
+                                </button>
+                                <button className="icon-btn edit" onClick={() => startEdit(i)} title="種目を編集"><Edit2 size={16} /></button>
+                                <button className="icon-btn delete" onClick={() => handleDeleteExercise(i)} title="種目を削除"><Trash2 size={16} /></button>
                               </div>
                             </div>
                             {ex.note && <p className="note"><Info size={12} /> {ex.note}</p>}
                           </div>
-                          <div className="sets-grid">
-                            {ex.sets.map((set, si) => {
-                              const oneRM = !ex.isBodyweight 
-                                ? (set.estimated1RM || calculate1RM(set.weight, set.reps, ex.bodyPart)) 
-                                : undefined;
-                              
-                              let setValText = `${set.weight}kg × ${set.reps}回`;
-                              if (ex.isBodyweight) {
-                                setValText = set.weight && set.weight > 0
-                                  ? `自重(+${set.weight}kg) × ${set.reps}回`
-                                  : `自重 × ${set.reps}回`;
-                              }
+                          {ex.isCardio ? (
+                            <div className="cardio-edit-row">
+                              <span className="cardio-edit-badge">
+                                🔥 消費カロリー: <strong>{ex.calories ? `${ex.calories} kcal` : '未記録'}</strong>
+                              </span>
+                            </div>
+                          ) : (
+                            <div className="sets-grid">
+                              {ex.sets.map((set, si) => {
+                                const oneRM = !ex.isBodyweight 
+                                  ? (set.estimated1RM || calculate1RM(set.weight, set.reps, ex.bodyPart)) 
+                                  : undefined;
+                                
+                                const unitLabel = ex.unit === 'lbs' ? 'lbs' : 'kg';
+                                let setValText = `${set.weight}${unitLabel} × ${set.reps}回`;
+                                if (ex.isBodyweight) {
+                                  setValText = set.weight && set.weight > 0
+                                    ? `自重(+${set.weight}${unitLabel}) × ${set.reps}回`
+                                    : `自重 × ${set.reps}回`;
+                                }
 
-                              return (
-                                <div key={si} className="set-row">
-                                  <span className="set-num">{si + 1}</span>
-                                  <span className="set-val">{setValText}</span>
-                                  {oneRM !== undefined && (
-                                    <span className="set-1rm" title={`${ex.bodyPart || ''} 推定1RM`}>
-                                      1RM {oneRM}kg
-                                    </span>
-                                  )}
-                                </div>
-                              );
-                            })}
-                          </div>
+                                return (
+                                  <div key={si} className="set-row">
+                                    <span className="set-num">{si + 1}</span>
+                                    <span className="set-val">{setValText}</span>
+                                    {oneRM !== undefined && (
+                                      <span className="set-1rm" title={`${ex.bodyPart || ''} 推定1RM`}>
+                                        1RM {oneRM}{unitLabel}
+                                      </span>
+                                    )}
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          )}
                         </div>
                       ))}
                     </div>
@@ -1250,6 +1569,66 @@ const CalendarPage: React.FC = () => {
                 )}
               </div>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* 日付変更・移動ダイアログ */}
+      {datePickerModal && datePickerModal.isOpen && (
+        <div className="modal-overlay date-picker-overlay animate-in" onClick={() => setDatePickerModal(null)}>
+          <div className="date-picker-dialog card" onClick={e => e.stopPropagation()}>
+            <div className="dialog-header">
+              <div className="dialog-title-group">
+                <CalendarIcon size={18} color="var(--primary-color)" />
+                <h4>{datePickerModal.title}</h4>
+              </div>
+              <button className="icon-btn-close" onClick={() => setDatePickerModal(null)}>
+                <X size={18} />
+              </button>
+            </div>
+
+            <div className="dialog-body">
+              {datePickerModal.description && (
+                <p className="dialog-desc">{datePickerModal.description}</p>
+              )}
+
+              <div className="form-group date-picker-group">
+                <label>移動先の日付を選択</label>
+                <input 
+                  type="date" 
+                  value={datePickerModal.targetDate}
+                  onChange={e => setDatePickerModal({ ...datePickerModal, targetDate: e.target.value })}
+                  className="dialog-date-input"
+                  autoFocus
+                />
+              </div>
+
+              {datePickerModal.targetDate === datePickerModal.currentDate && (
+                <p className="dialog-warning-text">※ 現在と同じ日付が選択されています。</p>
+              )}
+            </div>
+
+            <div className="dialog-actions">
+              <button 
+                type="button" 
+                className="btn-cancel" 
+                onClick={() => setDatePickerModal(null)}
+              >
+                キャンセル
+              </button>
+              <button 
+                type="button" 
+                className="btn-confirm"
+                disabled={!datePickerModal.targetDate || datePickerModal.targetDate === datePickerModal.currentDate}
+                onClick={async () => {
+                  if (datePickerModal.targetDate && datePickerModal.targetDate !== datePickerModal.currentDate) {
+                    await datePickerModal.onConfirm(datePickerModal.targetDate);
+                  }
+                }}
+              >
+                移動する
+              </button>
+            </div>
           </div>
         </div>
       )}

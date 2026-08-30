@@ -1235,5 +1235,69 @@
   color: #af52de;
 }
 
+/* Unit Filter Container */
+.unit-filter-container {
+  padding: 10px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 12px;
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.equipment-pill.unit-pill.active {
+  background: #ff9500;
+  border-color: #ff9500;
+  color: #000;
+  font-weight: 800;
+}
+
+.history-raw-lb-badge {
+  font-size: 11px;
+  font-weight: 700;
+  color: #ff9500;
+  background: rgba(255, 149, 0, 0.12);
+  border: 1px solid rgba(255, 149, 0, 0.25);
+  padding: 1px 6px;
+  border-radius: 4px;
+  margin-left: 6px;
+}
+
+/* 有酸素の日数併記スタイル */
+.month-days-container {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+}
+
+.month-cardio-days-sub {
+  font-size: 10px;
+  font-weight: 600;
+  color: #8e8e93;
+}
+
+.kpi-cardio-sub {
+  font-size: 10px;
+  font-weight: 600;
+  color: #8e8e93;
+  margin-top: 2px;
+}
+
+.compact-chip.cardio,
+.category-chip.cardio {
+  color: #ff5e3a !important;
+  background: rgba(255, 94, 58, 0.15) !important;
+  border-color: rgba(255, 94, 58, 0.4) !important;
+  font-weight: 700;
+}
+
+.rank-cardio-stat {
+  color: #ff5e3a;
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
 
 

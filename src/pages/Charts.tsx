@@ -5,6 +5,7 @@ import {
   getUniqueExerciseNames, 
   getWorkoutByDate, 
   calculate1RM, 
+  convertToKg,
   parseEquipmentTags, 
   type Exercise, 
   type Workout,
@@ -43,8 +44,13 @@ interface ChartDataPoint {
   max1RM: number;
   volume: number;
   reps: number;
+  calories?: number;
+  isCardio?: boolean;
   isBodyweight: boolean;
   equipment?: string;
+  unit?: 'kg' | 'lbs';
+  rawMaxWeight?: number;
+  rawMax1RM?: number;
   exerciseDetail: Exercise;
 }
 
@@ -107,6 +113,9 @@ interface MonthlyExerciseSummary {
   ppl?: PPLCategory;
   bodyPart?: BodyPartCategory;
   isBodyweight: boolean;
+  isCardio?: boolean;
+  calories?: number;
+  totalCalories?: number;
   maxWeight: number;
   max1RM?: number;
   totalReps: number;
@@ -118,6 +127,7 @@ interface MonthlyExerciseSummary {
     max1RM?: number;
     totalReps: number;
     totalVolume: number;
+    totalCalories?: number;
   };
 }
 
@@ -126,6 +136,8 @@ interface MonthlySummaryData {
   year: number;
   month: number;
   trainingDays: number;
+  strengthDaysCount: number;
+  allDaysCount: number;
   totalSets: number;
   totalReps: number;
   totalVolume: number;
@@ -133,7 +145,15 @@ interface MonthlySummaryData {
   bodyPartData: { name: string; value: number }[];
   pplLegendData: { name: string; value: number }[];
   bodyPartLegendData: { name: string; value: number }[];
-  topExercisesByReps: { name: string; reps: number; sets: number; bodyPart?: string }[];
+  topExercisesByReps: { 
+    name: string; 
+    reps: number; 
+    sets: number; 
+    bodyPart?: string;
+    isCardio?: boolean;
+    calories?: number;
+    daysCount?: number;
+  }[];
   pbList: { name: string; date: string; reasons: string[] }[];
   exerciseSummaries: MonthlyExerciseSummary[];
 }
@@ -154,10 +174,11 @@ const ChartsPage: React.FC = () => {
   const [selectedWorkout, setSelectedWorkout] = useState<Workout | null>(null);
   const [showModal, setShowModal] = useState(false);
   const [activeDate, setActiveDate] = useState<string | null>(null);
-  const [activeDetailType, setActiveDetailType] = useState<'maxWeight' | 'max1RM' | 'volume' | 'reps' | null>(null);
+  const [activeDetailType, setActiveDetailType] = useState<'maxWeight' | 'max1RM' | 'volume' | 'reps' | 'calories' | null>(null);
   const [detailSubView, setDetailSubView] = useState<'summary' | 'chart_only' | 'history_only'>('summary');
   const [onlyShowPB, setOnlyShowPB] = useState<boolean>(false);
   const [timeRangeScale, setTimeRangeScale] = useState<TimeRangeScale>('6m');
+  const [unitFilter, setUnitFilter] = useState<'all' | 'kg' | 'lbs'>('all');
   const expandedChartScrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -222,6 +243,7 @@ const ChartsPage: React.FC = () => {
       max1RM?: number;
       totalReps: number;
       totalVolume: number;
+      totalCalories?: number;
     }>> = {};
 
     const summaries: MonthlySummaryData[] = [];
@@ -232,16 +254,17 @@ const ChartsPage: React.FC = () => {
       const year = parseInt(yearStr, 10);
       const month = parseInt(monthStr, 10);
 
-      // トレーニング日数
-      const uniqueDates = new Set(workouts.map(w => w.date));
-      const trainingDays = uniqueDates.size;
-
       // 総セット数、総レップ数、総ボリューム
       let totalSets = 0;
       let totalReps = 0;
       let totalVolume = 0;
 
       // PPL・5分割集計（レップ数基準）
+      // 実施日数（筋トレのみを主日数、有酸素含む総日数も算出）
+      const strengthDaysCount = new Set(workouts.filter(w => w.exercises.some(e => !e.isCardio)).map(w => w.date)).size;
+      const allDaysCount = new Set(workouts.map(w => w.date)).size;
+
+      // PPL集計
       const pplRepsMap: Record<string, number> = {};
       const bodyPartRepsMap: Record<string, number> = {};
 
@@ -252,6 +275,9 @@ const ChartsPage: React.FC = () => {
         ppl?: PPLCategory;
         bodyPart?: BodyPartCategory;
         isBodyweight: boolean;
+        isCardio?: boolean;
+        calories?: number;
+        totalCalories?: number;
         maxWeight: number;
         max1RM?: number;
         totalReps: number;
@@ -263,52 +289,82 @@ const ChartsPage: React.FC = () => {
 
       workouts.forEach(w => {
         w.exercises.forEach(ex => {
-          const exVolume = ex.sets.reduce((sSum, s) => sSum + (s.weight || 0) * s.reps, 0);
-          const exReps = ex.sets.reduce((sSum, s) => sSum + s.reps, 0);
-          const exMaxWeight = Math.max(...ex.sets.map(s => s.weight || 0));
-          const exMax1RM = ex.sets.reduce((max, s) => {
-            const oneRM = !ex.isBodyweight ? (s.estimated1RM || calculate1RM(s.weight, s.reps, ex.bodyPart) || 0) : 0;
-            return Math.max(max, oneRM);
-          }, 0);
-
-          totalSets += ex.sets.length;
-          totalReps += exReps;
-          totalVolume += exVolume;
-
-          const pplCat = ex.ppl || 'それ以外';
-          pplRepsMap[pplCat] = (pplRepsMap[pplCat] || 0) + exReps;
-
-          const bpCat = ex.bodyPart || 'それ以外';
-          bodyPartRepsMap[bpCat] = (bodyPartRepsMap[bpCat] || 0) + exReps;
-
-          if (!exMap[ex.name]) {
-            exMap[ex.name] = {
-              name: ex.name,
-              equipment: ex.equipment,
-              ppl: ex.ppl,
-              bodyPart: ex.bodyPart,
-              isBodyweight: ex.isBodyweight,
-              maxWeight: exMaxWeight,
-              max1RM: exMax1RM > 0 ? exMax1RM : undefined,
-              totalReps: exReps,
-              totalVolume: exVolume,
-              setsCount: ex.sets.length,
-              daysCount: 0,
-              dates: new Set([w.date])
-            };
-          } else {
-            const cur = exMap[ex.name];
-            cur.maxWeight = Math.max(cur.maxWeight, exMaxWeight);
-            if (exMax1RM > 0) {
-              cur.max1RM = Math.max(cur.max1RM || 0, exMax1RM);
+          if (ex.isCardio) {
+            // 有酸素運動の集計
+            const cal = ex.calories || 0;
+            if (!exMap[ex.name]) {
+              exMap[ex.name] = {
+                name: ex.name,
+                equipment: ex.equipment,
+                isBodyweight: false,
+                isCardio: true,
+                calories: cal,
+                totalCalories: cal,
+                maxWeight: 0,
+                max1RM: undefined,
+                totalReps: 0,
+                totalVolume: 0,
+                setsCount: 1,
+                daysCount: 0,
+                dates: new Set([w.date])
+              };
+            } else {
+              const cur = exMap[ex.name];
+              cur.totalCalories = (cur.totalCalories || 0) + cal;
+              cur.setsCount += 1;
+              cur.dates.add(w.date);
+              if (!cur.equipment && ex.equipment) cur.equipment = ex.equipment;
             }
-            cur.totalReps += exReps;
-            cur.totalVolume += exVolume;
-            cur.setsCount += ex.sets.length;
-            cur.dates.add(w.date);
-            if (!cur.equipment && ex.equipment) cur.equipment = ex.equipment;
-            if (!cur.ppl && ex.ppl) cur.ppl = ex.ppl;
-            if (!cur.bodyPart && ex.bodyPart) cur.bodyPart = ex.bodyPart;
+          } else {
+            // 筋トレ種目の集計
+            const exVolume = ex.sets.reduce((sSum, s) => sSum + convertToKg(s.weight, ex.unit) * s.reps, 0);
+            const exReps = ex.sets.reduce((sSum, s) => sSum + s.reps, 0);
+            const exMaxWeight = Math.round(Math.max(...ex.sets.map(s => convertToKg(s.weight, ex.unit))) * 10) / 10;
+            const exMax1RM = Math.round(ex.sets.reduce((max, s) => {
+              const oneRM = !ex.isBodyweight ? (s.estimated1RM || calculate1RM(s.weight, s.reps, ex.bodyPart) || 0) : 0;
+              return Math.max(max, convertToKg(oneRM, ex.unit));
+            }, 0) * 10) / 10;
+
+            totalSets += ex.sets.length;
+            totalReps += exReps;
+            totalVolume += Math.round(exVolume);
+
+            const pplCat = ex.ppl || 'それ以外';
+            pplRepsMap[pplCat] = (pplRepsMap[pplCat] || 0) + exReps;
+
+            const bpCat = ex.bodyPart || 'それ以外';
+            bodyPartRepsMap[bpCat] = (bodyPartRepsMap[bpCat] || 0) + exReps;
+
+            if (!exMap[ex.name]) {
+              exMap[ex.name] = {
+                name: ex.name,
+                equipment: ex.equipment,
+                ppl: ex.ppl,
+                bodyPart: ex.bodyPart,
+                isBodyweight: ex.isBodyweight,
+                isCardio: false,
+                maxWeight: exMaxWeight,
+                max1RM: exMax1RM > 0 ? exMax1RM : undefined,
+                totalReps: exReps,
+                totalVolume: Math.round(exVolume),
+                setsCount: ex.sets.length,
+                daysCount: 0,
+                dates: new Set([w.date])
+              };
+            } else {
+              const cur = exMap[ex.name];
+              cur.maxWeight = Math.max(cur.maxWeight, exMaxWeight);
+              if (exMax1RM > 0) {
+                cur.max1RM = Math.max(cur.max1RM || 0, exMax1RM);
+              }
+              cur.totalReps += exReps;
+              cur.totalVolume += Math.round(exVolume);
+              cur.setsCount += ex.sets.length;
+              cur.dates.add(w.date);
+              if (!cur.equipment && ex.equipment) cur.equipment = ex.equipment;
+              if (!cur.ppl && ex.ppl) cur.ppl = ex.ppl;
+              if (!cur.bodyPart && ex.bodyPart) cur.bodyPart = ex.bodyPart;
+            }
           }
         });
       });
@@ -326,6 +382,9 @@ const ChartsPage: React.FC = () => {
           ppl: item.ppl,
           bodyPart: item.bodyPart,
           isBodyweight: item.isBodyweight,
+          isCardio: item.isCardio,
+          calories: item.calories,
+          totalCalories: item.totalCalories,
           maxWeight: item.maxWeight,
           max1RM: item.max1RM,
           totalReps: item.totalReps,
@@ -336,10 +395,16 @@ const ChartsPage: React.FC = () => {
             maxWeight: prev.maxWeight,
             max1RM: prev.max1RM,
             totalReps: prev.totalReps,
-            totalVolume: prev.totalVolume
+            totalVolume: prev.totalVolume,
+            totalCalories: prev.totalCalories
           } : undefined
         };
-      }).sort((a, b) => b.totalReps - a.totalReps); // レップ数順
+      }).sort((a, b) => {
+        if (a.isCardio && !b.isCardio) return 1;
+        if (!a.isCardio && b.isCardio) return -1;
+        if (a.isCardio && b.isCardio) return (b.totalCalories || 0) - (a.totalCalories || 0);
+        return b.totalReps - a.totalReps;
+      });
 
       // キャッシュに保存
       monthExSummariesCache[mKey] = {};
@@ -348,16 +413,20 @@ const ChartsPage: React.FC = () => {
           maxWeight: es.maxWeight,
           max1RM: es.max1RM,
           totalReps: es.totalReps,
-          totalVolume: es.totalVolume
+          totalVolume: es.totalVolume,
+          totalCalories: es.totalCalories
         };
       });
 
-      // やり込み種目 TOP 3（レップ数基準）
+      // やり込み種目 TOP 3
       const topExercisesByReps = exSummaries.slice(0, 3).map(es => ({
         name: es.name,
         reps: es.totalReps,
         sets: es.setsCount,
-        bodyPart: es.bodyPart
+        bodyPart: es.bodyPart,
+        isCardio: es.isCardio,
+        calories: es.totalCalories,
+        daysCount: es.daysCount
       }));
 
       // その月のPB一覧
@@ -365,24 +434,24 @@ const ChartsPage: React.FC = () => {
       workouts.forEach(w => {
         const pastWorkouts = sortedWorkouts.filter(pw => pw.date < w.date);
         w.exercises.forEach(ex => {
-          const todayMaxWeight = Math.max(...ex.sets.map(s => s.weight || 0));
-          const todayMax1RM = ex.sets.reduce((max, s) => {
+          const todayMaxWeight = Math.round(Math.max(...ex.sets.map(s => convertToKg(s.weight, ex.unit))) * 10) / 10;
+          const todayMax1RM = Math.round(ex.sets.reduce((max, s) => {
             const oneRM = !ex.isBodyweight ? (s.estimated1RM || calculate1RM(s.weight, s.reps, ex.bodyPart) || 0) : 0;
-            return Math.max(max, oneRM);
-          }, 0);
+            return Math.max(max, convertToKg(oneRM, ex.unit));
+          }, 0) * 10) / 10;
           const todayTotalReps = ex.sets.reduce((sum, s) => sum + s.reps, 0);
-          const todayTotalVolume = ex.sets.reduce((sum, s) => sum + (s.weight || 0) * s.reps, 0);
+          const todayTotalVolume = Math.round(ex.sets.reduce((sum, s) => sum + convertToKg(s.weight, ex.unit) * s.reps, 0) * 10) / 10;
 
           const pastSessions: { maxWeight: number; max1RM: number; totalReps: number; totalVolume: number }[] = [];
           pastWorkouts.forEach(pw => {
             pw.exercises.filter(pe => pe.name === ex.name).forEach(pe => {
-              const pMaxWeight = Math.max(...pe.sets.map(s => s.weight || 0));
-              const pMax1RM = pe.sets.reduce((max, s) => {
+              const pMaxWeight = Math.round(Math.max(...pe.sets.map(s => convertToKg(s.weight, pe.unit))) * 10) / 10;
+              const pMax1RM = Math.round(pe.sets.reduce((max, s) => {
                 const oneRM = !pe.isBodyweight ? (s.estimated1RM || calculate1RM(s.weight, s.reps, pe.bodyPart) || 0) : 0;
-                return Math.max(max, oneRM);
-              }, 0);
+                return Math.max(max, convertToKg(oneRM, pe.unit));
+              }, 0) * 10) / 10;
               const pTotalReps = pe.sets.reduce((sum, s) => sum + s.reps, 0);
-              const pTotalVolume = pe.sets.reduce((sum, s) => sum + (s.weight || 0) * s.reps, 0);
+              const pTotalVolume = Math.round(pe.sets.reduce((sum, s) => sum + convertToKg(s.weight, pe.unit) * s.reps, 0) * 10) / 10;
               pastSessions.push({ maxWeight: pMaxWeight, max1RM: pMax1RM, totalReps: pTotalReps, totalVolume: pTotalVolume });
             });
           });
@@ -440,7 +509,9 @@ const ChartsPage: React.FC = () => {
         monthKey: mKey,
         year,
         month,
-        trainingDays,
+        trainingDays: strengthDaysCount,
+        strengthDaysCount,
+        allDaysCount,
         totalSets,
         totalReps,
         totalVolume,
@@ -481,15 +552,21 @@ const ChartsPage: React.FC = () => {
     const results = await getExercisesByName(selectedName);
     const data: ChartDataPoint[] = results.map(r => {
       const ex = r.exercise!;
-      const maxWeight = Math.max(...ex.sets.map(s => s.weight || 0));
-      const max1RM = ex.sets.reduce((max, s) => {
+      const isCardio = !!ex.isCardio;
+      const calories = ex.calories || 0;
+      const rawMaxWeight = isCardio ? 0 : Math.max(...(ex.sets || []).map(s => s.weight || 0));
+      const rawMax1RM = isCardio ? 0 : (ex.sets || []).reduce((max, s) => {
         const oneRM = !ex.isBodyweight 
           ? (s.estimated1RM || calculate1RM(s.weight, s.reps, ex.bodyPart) || 0)
           : 0;
         return Math.max(max, oneRM);
       }, 0);
-      const volume = ex.sets.reduce((sum, s) => sum + (s.weight || 0) * s.reps, 0);
-      const reps = ex.sets.reduce((sum, s) => sum + s.reps, 0);
+      
+      const isLbs = ex.unit === 'lbs';
+      const maxWeight = isLbs ? Math.round(convertToKg(rawMaxWeight, 'lbs') * 10) / 10 : rawMaxWeight;
+      const max1RM = isLbs ? Math.round(convertToKg(rawMax1RM, 'lbs') * 10) / 10 : rawMax1RM;
+      const volume = isCardio ? 0 : Math.round((ex.sets || []).reduce((sum, s) => sum + convertToKg(s.weight, ex.unit) * s.reps, 0) * 10) / 10;
+      const reps = isCardio ? 0 : (ex.sets || []).reduce((sum, s) => sum + s.reps, 0);
       
       const timestamp = new Date(r.date + 'T00:00:00').getTime();
 
@@ -500,8 +577,13 @@ const ChartsPage: React.FC = () => {
         max1RM,
         volume,
         reps,
+        calories,
+        isCardio,
         isBodyweight: ex.isBodyweight,
         equipment: ex.equipment,
+        unit: ex.unit || 'kg',
+        rawMaxWeight,
+        rawMax1RM,
         exerciseDetail: ex
       };
     }).sort((a, b) => a.timestamp - b.timestamp);
@@ -552,20 +634,30 @@ const ChartsPage: React.FC = () => {
     }
   };
 
-  // 選択された器具・タグフィルターに基づいてチャートデータを絞り込み（複数タグAND条件）
+  // 選択された器具・タグフィルターおよび単位フィルターに基づいてチャートデータを絞り込み
   const chartData = useMemo(() => {
+    let list = rawChartData;
+
+    // 1. 単位フィルター
+    if (unitFilter === 'kg') {
+      list = list.filter(d => d.unit !== 'lbs');
+    } else if (unitFilter === 'lbs') {
+      list = list.filter(d => d.unit === 'lbs');
+    }
+
+    // 2. 器具・タグフィルター
     if (selectedEquipments.length === 0) {
-      return rawChartData;
+      return list;
     }
     if (selectedEquipments.includes('__none__')) {
-      return rawChartData.filter(d => parseEquipmentTags(d.equipment).length === 0);
+      return list.filter(d => parseEquipmentTags(d.equipment).length === 0);
     }
     // 選択されたすべてのタグが含まれているデータを抽出（AND条件）
-    return rawChartData.filter(d => {
+    return list.filter(d => {
       const itemTags = parseEquipmentTags(d.equipment);
       return selectedEquipments.every(selTag => itemTags.includes(selTag));
     });
-  }, [rawChartData, selectedEquipments]);
+  }, [rawChartData, selectedEquipments, unitFilter]);
 
   const filteredNames = useMemo(() => {
     return exerciseNames.filter(name => 
@@ -629,6 +721,7 @@ const ChartsPage: React.FC = () => {
     setActiveDetailType(null);
     setDetailSubView('summary');
     setOnlyShowPB(false);
+    setUnitFilter('all');
   };
 
   const getDayOfWeek = (dateStr: string) => {
@@ -639,15 +732,23 @@ const ChartsPage: React.FC = () => {
 
   const CustomTooltip = ({ active, payload }: any) => {
     if (active && payload && payload.length) {
-      const itemData = payload[0].payload;
+      const itemData = payload[0].payload as ChartDataPoint;
       return (
         <div className="custom-tooltip glass">
-          <p className="label">{itemData.date}</p>
-          {payload.map((p: any, i: number) => (
-            <p key={i} className="value" style={{ color: p.color }}>
-              {p.name}: {p.value}{p.unit}
-            </p>
-          ))}
+          <p className="label">{itemData.date} ({getDayOfWeek(itemData.date)})</p>
+          {payload.map((p: any, i: number) => {
+            const isLbs = itemData.unit === 'lbs';
+            let extraLabel = '';
+            if (isLbs && (p.dataKey === 'maxWeight' || p.dataKey === 'max1RM')) {
+              const rawVal = p.dataKey === 'maxWeight' ? itemData.rawMaxWeight : itemData.rawMax1RM;
+              if (rawVal) extraLabel = ` (${rawVal} lbs)`;
+            }
+            return (
+              <p key={i} className="value" style={{ color: p.color }}>
+                {p.name}: {p.value} {p.unit || ''}{extraLabel}
+              </p>
+            );
+          })}
         </div>
       );
     }
@@ -687,6 +788,12 @@ const ChartsPage: React.FC = () => {
       unit = '回';
       strokeColor = 'rgba(255, 0, 85, 0.6)';
       chartIcon = <RotateCcw size={20} />;
+    } else if (activeDetailType === 'calories') {
+      chartTitle = '消費カロリー推移';
+      dataKey = 'calories';
+      unit = 'kcal';
+      strokeColor = '#ff5e3a';
+      chartIcon = <Flame size={20} color="#ff5e3a" />;
     }
 
     // 過去最高の更新日付を古い順から計算（フィルターとハイライトで使用するため常に計算）
@@ -847,6 +954,11 @@ const ChartsPage: React.FC = () => {
                   {item[dataKey as keyof ChartDataPoint] as number}
                 </span>
                 <span className="history-unit">{unit}</span>
+                {item.unit === 'lbs' && (activeDetailType === 'maxWeight' || activeDetailType === 'max1RM') && (
+                  <span className="history-raw-lb-badge" title="記録時のポンド重量">
+                    ({activeDetailType === 'maxWeight' ? item.rawMaxWeight : item.rawMax1RM} lbs)
+                  </span>
+                )}
               </div>
             </div>
           );
@@ -912,6 +1024,9 @@ const ChartsPage: React.FC = () => {
             </span>
           </div>
         </div>
+
+        {/* 記録単位フィルター */}
+        {renderUnitFilter()}
 
         {detailSubView === 'summary' && (
           <div className="subview-summary-container animate-in">
@@ -1026,7 +1141,12 @@ const ChartsPage: React.FC = () => {
             <div className="monthly-card-date">
               <span className="month-main">{m.year}年</span>
               <span className="month-huge">{m.month}月</span>
-              <span className="month-days-badge">{m.trainingDays}日実施</span>
+              <div className="month-days-container">
+                <span className="month-days-badge">{m.trainingDays}日実施</span>
+                {m.allDaysCount > m.trainingDays && (
+                  <span className="month-cardio-days-sub">（有酸素含む: {m.allDaysCount}日）</span>
+                )}
+              </div>
             </div>
 
             <div className="monthly-card-metrics">
@@ -1104,6 +1224,9 @@ const ChartsPage: React.FC = () => {
                 <span className="kpi-value">{m.trainingDays}</span>
                 <span className="kpi-unit">日</span>
               </div>
+              {m.allDaysCount > m.trainingDays && (
+                <span className="kpi-cardio-sub">（有酸素含む: {m.allDaysCount}日）</span>
+              )}
             </div>
             <div className="summary-kpi-card">
               <span className="kpi-label">総レップ数</span>
@@ -1128,12 +1251,12 @@ const ChartsPage: React.FC = () => {
             </div>
           </div>
 
-          {/* やり込み種目 TOP 3（レップ数基準） */}
+          {/* やり込み種目 TOP 3 */}
           {m.topExercisesByReps.length > 0 && (
             <div className="monthly-top-ranks card">
               <div className="top-ranks-header">
                 <Award size={16} color="#ff9500" />
-                <h4>月間やり込み種目 TOP 3（総レップ数）</h4>
+                <h4>月間やり込み種目 TOP 3</h4>
               </div>
               <div className="top-ranks-grid">
                 {m.topExercisesByReps.map((top, rankIdx) => (
@@ -1141,7 +1264,15 @@ const ChartsPage: React.FC = () => {
                     <span className="rank-badge">#{rankIdx + 1}</span>
                     <div className="rank-info">
                       <span className="rank-name">{top.name}</span>
-                      <span className="rank-stat">{top.reps.toLocaleString()} reps <small>({top.sets} sets)</small></span>
+                      <span className="rank-stat">
+                        {top.isCardio ? (
+                          <span className="rank-cardio-stat">
+                            🔥 {top.calories ? `${top.calories.toLocaleString()} kcal` : '有酸素'} {top.daysCount ? <small>({top.daysCount}日)</small> : null}
+                          </span>
+                        ) : (
+                          <>{top.reps.toLocaleString()} reps <small>({top.sets} sets)</small></>
+                        )}
+                      </span>
                     </div>
                   </div>
                 ))}
@@ -1301,65 +1432,79 @@ const ChartsPage: React.FC = () => {
                           ))}
                         </div>
                         <div className="table-ex-chips">
-                          {ex.ppl && (
-                            <span 
-                              className="compact-chip ppl"
-                              style={{
-                                color: PPL_COLORS[ex.ppl] || '#8e8e93',
-                                background: `${PPL_COLORS[ex.ppl] || '#8e8e93'}18`,
-                                borderColor: `${PPL_COLORS[ex.ppl] || '#8e8e93'}40`
-                              }}
-                            >
-                              {ex.ppl}
-                            </span>
-                          )}
-                          {ex.bodyPart && (
-                            <span 
-                              className="compact-chip bodypart"
-                              style={{
-                                color: BODY_PART_COLORS[ex.bodyPart] || '#8e8e93',
-                                background: `${BODY_PART_COLORS[ex.bodyPart] || '#8e8e93'}18`,
-                                borderColor: `${BODY_PART_COLORS[ex.bodyPart] || '#8e8e93'}40`
-                              }}
-                            >
-                              {ex.bodyPart}
-                            </span>
+                          {ex.isCardio ? (
+                            <span className="compact-chip cardio">🏃 有酸素</span>
+                          ) : (
+                            <>
+                              {ex.ppl && (
+                                <span 
+                                  className="compact-chip ppl"
+                                  style={{
+                                    color: PPL_COLORS[ex.ppl] || '#8e8e93',
+                                    background: `${PPL_COLORS[ex.ppl] || '#8e8e93'}18`,
+                                    borderColor: `${PPL_COLORS[ex.ppl] || '#8e8e93'}40`
+                                  }}
+                                >
+                                  {ex.ppl}
+                                </span>
+                              )}
+                              {ex.bodyPart && (
+                                <span 
+                                  className="compact-chip bodypart"
+                                  style={{
+                                    color: BODY_PART_COLORS[ex.bodyPart] || '#8e8e93',
+                                    background: `${BODY_PART_COLORS[ex.bodyPart] || '#8e8e93'}18`,
+                                    borderColor: `${BODY_PART_COLORS[ex.bodyPart] || '#8e8e93'}40`
+                                  }}
+                                >
+                                  {ex.bodyPart}
+                                </span>
+                              )}
+                            </>
                           )}
                         </div>
                       </td>
                       <td>
                         <div className="cell-stat-val">
-                          {ex.isBodyweight 
-                            ? (ex.maxWeight > 0 ? `+${ex.maxWeight}kg` : '自重') 
-                            : `${ex.maxWeight}kg`}
+                          {ex.isCardio ? '-' : (
+                            ex.isBodyweight 
+                              ? (ex.maxWeight > 0 ? `+${ex.maxWeight}kg` : '自重') 
+                              : `${ex.maxWeight}kg`
+                          )}
                         </div>
                         <div className="cell-diff">
-                          {!ex.isBodyweight && renderDiffBadge(ex.maxWeight, ex.prevMonth?.maxWeight, 'kg')}
+                          {!ex.isCardio && !ex.isBodyweight && renderDiffBadge(ex.maxWeight, ex.prevMonth?.maxWeight, 'kg')}
                         </div>
                       </td>
                       <td>
                         <div className="cell-stat-val">
-                          {!ex.isBodyweight && ex.max1RM ? `${ex.max1RM}kg` : '-'}
+                          {!ex.isCardio && !ex.isBodyweight && ex.max1RM ? `${ex.max1RM}kg` : '-'}
                         </div>
                         <div className="cell-diff">
-                          {!ex.isBodyweight && ex.max1RM && renderDiffBadge(ex.max1RM, ex.prevMonth?.max1RM, 'kg')}
-                        </div>
-                      </td>
-                      <td>
-                        <div className="cell-stat-val">{ex.totalReps.toLocaleString()}回</div>
-                        <div className="cell-diff">
-                          {renderDiffBadge(ex.totalReps, ex.prevMonth?.totalReps, '回')}
+                          {!ex.isCardio && !ex.isBodyweight && ex.max1RM && renderDiffBadge(ex.max1RM, ex.prevMonth?.max1RM, 'kg')}
                         </div>
                       </td>
                       <td>
-                        <div className="cell-stat-val">{ex.totalVolume.toLocaleString()}kg</div>
+                        <div className="cell-stat-val">{ex.isCardio ? '-' : `${ex.totalReps.toLocaleString()}回`}</div>
                         <div className="cell-diff">
-                          {renderDiffBadge(ex.totalVolume, ex.prevMonth?.totalVolume, 'kg')}
+                          {!ex.isCardio && renderDiffBadge(ex.totalReps, ex.prevMonth?.totalReps, '回')}
+                        </div>
+                      </td>
+                      <td>
+                        <div className="cell-stat-val">
+                          {ex.isCardio 
+                            ? (ex.totalCalories ? `${ex.totalCalories.toLocaleString()} kcal` : '-') 
+                            : `${ex.totalVolume.toLocaleString()}kg`}
+                        </div>
+                        <div className="cell-diff">
+                          {ex.isCardio 
+                            ? renderDiffBadge(ex.totalCalories || 0, ex.prevMonth?.totalCalories, 'kcal')
+                            : renderDiffBadge(ex.totalVolume, ex.prevMonth?.totalVolume, 'kg')}
                         </div>
                       </td>
                       <td className="cell-meta">
                         <span>{ex.daysCount}日</span>
-                        <small>({ex.setsCount}s)</small>
+                        {!ex.isCardio && <small>({ex.setsCount}s)</small>}
                       </td>
                     </tr>
                   ))}
@@ -1367,6 +1512,46 @@ const ChartsPage: React.FC = () => {
               </table>
             </div>
           </div>
+        </div>
+      </div>
+    );
+  };
+
+  const renderUnitFilter = () => {
+    // LB記録が1件以上ある場合に単位フィルターを表示
+    const lbsCount = rawChartData.filter(d => d.unit === 'lbs').length;
+    if (lbsCount === 0) return null;
+
+    const allCount = rawChartData.length;
+    const kgCount = rawChartData.filter(d => d.unit !== 'lbs').length;
+
+    return (
+      <div className="unit-filter-container card">
+        <div className="equipment-filter-label">
+          <span>記録単位で絞り込み</span>
+        </div>
+        <div className="equipment-pills-list">
+          <button 
+            type="button"
+            className={`equipment-pill unit-pill ${unitFilter === 'all' ? 'active' : ''}`}
+            onClick={() => setUnitFilter('all')}
+          >
+            すべて <span className="pill-count">({allCount})</span>
+          </button>
+          <button 
+            type="button"
+            className={`equipment-pill unit-pill ${unitFilter === 'kg' ? 'active' : ''}`}
+            onClick={() => setUnitFilter('kg')}
+          >
+            kgのみ <span className="pill-count">({kgCount})</span>
+          </button>
+          <button 
+            type="button"
+            className={`equipment-pill unit-pill ${unitFilter === 'lbs' ? 'active' : ''}`}
+            onClick={() => setUnitFilter('lbs')}
+          >
+            LBのみ <span className="pill-count">({lbsCount})</span>
+          </button>
         </div>
       </div>
     );
@@ -1500,10 +1685,43 @@ const ChartsPage: React.FC = () => {
             </div>
           </div>
 
+          {/* 記録単位フィルター（有酸素種目では非表示） */}
+          {!rawChartData[0]?.isCardio && renderUnitFilter()}
+
           {/* マシン・器具フィルター */}
           {renderEquipmentFilter()}
 
-          {!isBodyweight && defaultSixMonthsChartData.length > 0 && (
+          {/* --- 有酸素運動の場合：消費カロリーグラフのみ表示 --- */}
+          {rawChartData[0]?.isCardio && defaultSixMonthsChartData.length > 0 && (
+            <div className="chart-section card" onClick={() => setActiveDetailType('calories')}>
+              <div className="chart-header">
+                <Flame size={18} color="#ff5e3a" />
+                <h3>消費カロリー推移 (kcal)</h3>
+              </div>
+              <div className="chart-container" style={{ pointerEvents: 'none' }}>
+                <ResponsiveContainer width="100%" height={220}>
+                  <LineChart 
+                    data={defaultSixMonthsChartData} 
+                    margin={{ top: 10, right: 10, left: -20, bottom: 0 }}
+                  >
+                    <CartesianGrid strokeDasharray="3 3" stroke="#2a2a2a" vertical={false} />
+                    <XAxis dataKey="timestamp" type="number" scale="time" domain={['dataMin', 'dataMax']} hide />
+                    <YAxis stroke="#a0a0a0" fontSize={12} />
+                    <Line 
+                      type="monotone" 
+                      dataKey="calories" 
+                      stroke="#ff5e3a" 
+                      strokeWidth={3}
+                      dot={{ r: 4, fill: '#ff5e3a', strokeWidth: 0 }}
+                    />
+                  </LineChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+          )}
+
+          {/* --- 筋トレ種目の場合：4つのグラフを表示 --- */}
+          {!rawChartData[0]?.isCardio && !isBodyweight && defaultSixMonthsChartData.length > 0 && (
             <div className="chart-section card" onClick={() => setActiveDetailType('maxWeight')}>
               <div className="chart-header">
                 <TrendingUp size={18} />
@@ -1531,7 +1749,7 @@ const ChartsPage: React.FC = () => {
             </div>
           )}
 
-          {!isBodyweight && defaultSixMonthsChartData.some(d => d.max1RM > 0) && (
+          {!rawChartData[0]?.isCardio && !isBodyweight && defaultSixMonthsChartData.some(d => d.max1RM > 0) && (
             <div className="chart-section card" onClick={() => setActiveDetailType('max1RM')}>
               <div className="chart-header">
                 <Zap size={18} color="#ff9500" />
@@ -1559,7 +1777,7 @@ const ChartsPage: React.FC = () => {
             </div>
           )}
 
-          {!isBodyweight && defaultSixMonthsChartData.length > 0 && (
+          {!rawChartData[0]?.isCardio && !isBodyweight && defaultSixMonthsChartData.length > 0 && (
             <div className="chart-section card" onClick={() => setActiveDetailType('volume')}>
               <div className="chart-header">
                 <Activity size={18} />
@@ -1587,7 +1805,7 @@ const ChartsPage: React.FC = () => {
             </div>
           )}
 
-          {defaultSixMonthsChartData.length > 0 && (
+          {!rawChartData[0]?.isCardio && defaultSixMonthsChartData.length > 0 && (
             <div className="chart-section card" onClick={() => setActiveDetailType('reps')}>
               <div className="chart-header">
                 <RotateCcw size={18} />
@@ -1655,10 +1873,11 @@ const ChartsPage: React.FC = () => {
                         ? (set.estimated1RM || calculate1RM(set.weight, set.reps, ex.bodyPart)) 
                         : undefined;
 
-                      let setValText = `${set.weight}kg × ${set.reps}回`;
+                      const unitLabel = ex.unit === 'lbs' ? 'lbs' : 'kg';
+                      let setValText = `${set.weight}${unitLabel} × ${set.reps}回`;
                       if (ex.isBodyweight) {
                         setValText = set.weight && set.weight > 0
-                          ? `自重(+${set.weight}kg) × ${set.reps}回`
+                          ? `自重(+${set.weight}${unitLabel}) × ${set.reps}回`
                           : `自重 × ${set.reps}回`;
                       }
 
@@ -1668,7 +1887,7 @@ const ChartsPage: React.FC = () => {
                           <span className="set-val">{setValText}</span>
                           {oneRM !== undefined && (
                             <span className="set-1rm" title={`${ex.bodyPart || ''} 推定1RM`}>
-                              1RM {oneRM}kg
+                              1RM {oneRM}{unitLabel}
                             </span>
                           )}
                         </div>

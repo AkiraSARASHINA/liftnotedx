@@ -271,6 +271,53 @@
   cursor: pointer;
 }
 
+.form-row-double {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.unit-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.unit-label {
+  font-size: 13px;
+  color: var(--text-secondary);
+  font-weight: 600;
+}
+
+.unit-toggle-group {
+  display: flex;
+  background: rgba(255, 255, 255, 0.05);
+  padding: 3px;
+  border-radius: 8px;
+  border: 1px solid var(--border-color);
+  gap: 2px;
+}
+
+.unit-toggle-btn {
+  background: transparent;
+  border: none;
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 700;
+  padding: 4px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.unit-toggle-btn.active {
+  background: var(--primary-color);
+  color: white;
+  box-shadow: 0 1px 4px rgba(0, 163, 255, 0.3);
+}
+
 .edit-set-row {
   display: flex;
   align-items: center;
@@ -302,11 +349,45 @@
   padding: 4px;
 }
 
+.set-action-btns {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: auto;
+}
+
+.move-set-btn {
+  background: rgba(0, 163, 255, 0.1);
+  color: var(--primary-color);
+  padding: 6px;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid rgba(0, 163, 255, 0.25);
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.move-set-btn:hover {
+  background: rgba(0, 163, 255, 0.2);
+}
+
 .remove-set-btn {
   background: rgba(255, 69, 58, 0.1);
   color: var(--secondary-color);
-  padding: 4px;
-  border-radius: 4px;
+  padding: 6px;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid rgba(255, 69, 58, 0.25);
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.remove-set-btn:hover {
+  background: rgba(255, 69, 58, 0.2);
 }
 
 .save-edit-btn {
@@ -1080,5 +1161,305 @@
 .summary-font-large .compact-set-pill { font-size: 15px; padding: 4px 10px; }
 .summary-font-large .set-1rm-mini { font-size: 11px; }
 
+/* Move Day Button in Header */
+.move-day-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  background: rgba(0, 163, 255, 0.1);
+  color: var(--primary-color);
+  border: 1px solid rgba(0, 163, 255, 0.25);
+  padding: 4px 10px;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
 
+.move-day-btn:hover {
+  background: rgba(0, 163, 255, 0.2);
+  transform: translateY(-1px);
+}
 
+/* Icon Button Move */
+.icon-btn.move {
+  background: rgba(0, 163, 255, 0.1);
+  color: var(--primary-color);
+  border: 1px solid rgba(0, 163, 255, 0.25);
+}
+
+.icon-btn.move:hover {
+  background: rgba(0, 163, 255, 0.2);
+}
+
+/* Date Picker Dialog Modal */
+.date-picker-overlay {
+  z-index: 3000;
+  background: rgba(0, 0, 0, 0.75);
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+}
+
+.date-picker-dialog {
+  width: 100%;
+  max-width: 380px;
+  background: #1c1c1e;
+  border: 1px solid var(--border-color);
+  border-radius: 16px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.6);
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.dialog-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  padding-bottom: 12px;
+}
+
+.dialog-title-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.dialog-title-group h4 {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin: 0;
+}
+
+.icon-btn-close {
+  background: transparent;
+  border: none;
+  color: var(--text-secondary);
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+}
+
+.icon-btn-close:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: var(--text-primary);
+}
+
+.dialog-body {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.dialog-desc {
+  font-size: 12.5px;
+  color: var(--text-secondary);
+  line-height: 1.4;
+  margin: 0;
+}
+
+.date-picker-group label {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-secondary);
+}
+
+.dialog-date-input {
+  width: 100%;
+  padding: 12px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  color: var(--text-primary);
+  font-size: 16px;
+  font-weight: 700;
+  box-sizing: border-box;
+  outline: none;
+  transition: border-color 0.2s;
+}
+
+.dialog-date-input:focus {
+  border-color: var(--primary-color);
+}
+
+.dialog-warning-text {
+  font-size: 11.5px;
+  color: #ff9500;
+  margin: 0;
+}
+
+.dialog-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 4px;
+}
+
+.btn-cancel {
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--text-secondary);
+  border: 1px solid var(--border-color);
+  padding: 8px 16px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.btn-cancel:hover {
+  background: rgba(255, 255, 255, 0.12);
+  color: var(--text-primary);
+}
+
+.btn-confirm {
+  background: var(--primary-color);
+  color: white;
+  border: none;
+  padding: 8px 18px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.btn-confirm:hover:not(:disabled) {
+  opacity: 0.9;
+  transform: translateY(-1px);
+}
+
+.btn-confirm:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* --- 有酸素運動関連スタイル --- */
+.exercise-type-toggle {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  background: rgba(0, 0, 0, 0.25);
+  padding: 4px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.type-toggle-btn {
+  background: transparent;
+  border: 1px solid transparent;
+  color: var(--text-secondary);
+  padding: 8px 12px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  transition: all 0.2s ease;
+}
+
+.type-toggle-btn.active {
+  background: var(--primary-color);
+  color: white;
+  box-shadow: 0 2px 8px rgba(0, 163, 255, 0.35);
+}
+
+.type-toggle-btn.cardio.active {
+  background: #ff5e3a;
+  color: white;
+  box-shadow: 0 2px 8px rgba(255, 94, 58, 0.35);
+}
+
+.cardio-calories-group {
+  margin-top: 4px;
+}
+
+.calorie-input-wrapper {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 8px;
+  padding: 0 12px;
+}
+
+.calorie-input-wrapper:focus-within {
+  border-color: #ff5e3a;
+  box-shadow: 0 0 0 2px rgba(255, 94, 58, 0.2);
+}
+
+.calorie-input {
+  flex: 1;
+  background: transparent !important;
+  border: none !important;
+  outline: none !important;
+  color: var(--text-primary);
+  font-size: 15px;
+  font-weight: 700;
+  padding: 10px 0 !important;
+}
+
+.calorie-unit {
+  font-size: 13px;
+  font-weight: 700;
+  color: #ff5e3a;
+}
+
+/* サマリー・リスト内の有酸素バッジ */
+.compact-chip.cardio,
+.category-chip.cardio {
+  color: #ff5e3a !important;
+  background: rgba(255, 94, 58, 0.15) !important;
+  border-color: rgba(255, 94, 58, 0.4) !important;
+  font-weight: 700;
+}
+
+.compact-cardio-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 0;
+}
+
+.cardio-calorie-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 13px;
+  font-weight: 700;
+  color: #ff5e3a;
+  background: rgba(255, 94, 58, 0.12);
+  border: 1px solid rgba(255, 94, 58, 0.25);
+  padding: 4px 10px;
+  border-radius: 6px;
+}
+
+.cardio-edit-row {
+  padding: 6px 0;
+}
+
+.cardio-edit-badge {
+  font-size: 13px;
+  color: #ff5e3a;
+  background: rgba(255, 94, 58, 0.1);
+  border: 1px solid rgba(255, 94, 58, 0.25);
+  padding: 6px 12px;
+  border-radius: 8px;
+  display: inline-block;
+}

@@ -65,6 +65,26 @@ export const calculate1RM = (
   return oneRM !== undefined ? Math.round(oneRM * 10) / 10 : undefined;
 };
 
+export const LB_TO_KG = 0.45359237;
+
+/**
+ * 重量をkg単位に換算するヘルパー
+ */
+export const convertToKg = (weight?: number, unit?: 'kg' | 'lbs'): number => {
+  if (weight === undefined || weight === null) return 0;
+  if (unit === 'lbs') {
+    return weight * LB_TO_KG;
+  }
+  return weight;
+};
+
+export interface WorkoutSet {
+  weight?: number;
+  reps: number;
+  estimated1RM?: number;
+  unit?: 'kg' | 'lbs';
+}
+
 // 互換用 Brzycki式
 export const calculateBrzycki1RM = (weight?: number, reps?: number): number | undefined => {
   return calculate1RM(weight, reps, '肩');
@@ -72,11 +92,14 @@ export const calculateBrzycki1RM = (weight?: number, reps?: number): number | un
 
 export interface Exercise {
   name: string;
+  isCardio?: boolean;
+  calories?: number;
   isBodyweight: boolean;
   equipment?: string;
   note?: string;
   ppl?: PPLCategory;
   bodyPart?: BodyPartCategory;
+  unit?: 'kg' | 'lbs';
   sets: WorkoutSet[];
 }
 
@@ -210,10 +233,13 @@ export const getExercisesByName = async (name: string) => {
       equipmentGroups.forEach((exList, eqKey) => {
         const mergedExercise: Exercise = {
           name,
+          isCardio: exList[0].isCardio,
+          calories: exList.reduce((sum, e) => sum + (e.calories || 0), 0) || undefined,
           isBodyweight: exList[0].isBodyweight,
           equipment: eqKey || undefined,
           ppl: exList.find(e => !!e.ppl)?.ppl,
           bodyPart: exList.find(e => !!e.bodyPart)?.bodyPart,
+          unit: exList.find(e => !!e.unit)?.unit,
           note: exList
             .map(e => e.note)
             .filter(n => !!n)
