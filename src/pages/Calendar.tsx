@@ -9,7 +9,6 @@ import {
   parseEquipmentTags,
   type Workout, 
   type Exercise, 
-  type WorkoutSet,
   type PPLCategory,
   type BodyPartCategory 
 } from '../lib/db';
@@ -33,8 +32,12 @@ import {
   Activity, 
   Layers, 
   ChevronLeft,
-  Flame
+  Flame,
+  ChevronRight
 } from 'lucide-react';
+import { ExerciseSelectorModal } from '../components/ExerciseSelectorModal';
+import { SetPickerModal } from '../components/SetPickerModal';
+import type { ExerciseDefinition } from '../lib/exerciseDictionary';
 import './Calendar.css';
 
 type ViewMode = 'grid' | 'list';
@@ -98,6 +101,11 @@ const CalendarPage: React.FC = () => {
   const [monthsToDisplay, setMonthsToDisplay] = useState<Date[]>([]);
   const [uniqueNames, setUniqueNames] = useState<string[]>([]);
   const [uniqueEquipments, setUniqueEquipments] = useState<string[]>([]);
+
+  // キーボードレスUI用モーダル制御ステート
+  const [isExerciseSelectorOpen, setIsExerciseSelectorOpen] = useState<boolean>(false);
+  const [pickerSetIndex, setPickerSetIndex] = useState<number | null>(null);
+  const [isManualExerciseInput, setIsManualExerciseInput] = useState<boolean>(false);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const listScrollContainerRef = useRef<HTMLDivElement>(null);
 
@@ -284,12 +292,17 @@ const CalendarPage: React.FC = () => {
       setEditForm({
         name: '',
         equipment: '',
+        isCardio: false,
+        calories: undefined,
         ppl: undefined,
         bodyPart: undefined,
+        unit: 'kg',
         isBodyweight: false,
         note: '',
-        sets: [{ weight: 0, reps: 0 }]
+        sets: [{ weight: 0, reps: 10 }]
       });
+      setIsExerciseSelectorOpen(true);
+      setIsManualExerciseInput(false);
     }
 
     setShowModal(true);
@@ -482,6 +495,47 @@ const CalendarPage: React.FC = () => {
     loadUniqueNames();
   };
 
+  const handleSelectExerciseFromDictionary = (ex: ExerciseDefinition) => {
+    setEditForm(prev => ({
+      ...prev,
+      name: ex.name,
+      isCardio: !!ex.isCardio,
+      calories: ex.isCardio ? (prev.calories || 0) : undefined,
+      ppl: ex.ppl,
+      bodyPart: ex.category === '有酸素運動' ? undefined : (ex.category as BodyPartCategory),
+      isBodyweight: !!ex.isBodyweight,
+      sets: (!prev.sets || prev.sets.length === 0 || (prev.sets.length === 1 && prev.sets[0].weight === 0 && prev.sets[0].reps === 0))
+        ? [{ weight: 0, reps: 10 }]
+        : prev.sets
+    }));
+    setIsManualExerciseInput(false);
+  };
+
+  const handleSaveSetFromPicker = (data: { weight: number; reps: number; unit: 'kg' | 'lbs'; addNext?: boolean }) => {
+    if (pickerSetIndex === null) return;
+
+    const updatedSets = [...editForm.sets];
+    updatedSets[pickerSetIndex] = {
+      ...updatedSets[pickerSetIndex],
+      weight: data.weight,
+      reps: data.reps
+    };
+
+    if (data.addNext) {
+      updatedSets.push({
+        weight: data.weight,
+        reps: data.reps
+      });
+      setPickerSetIndex(updatedSets.length - 1);
+    }
+
+    setEditForm(prev => ({
+      ...prev,
+      unit: data.unit,
+      sets: updatedSets
+    }));
+  };
+
   const startAdd = () => {
     setIsAddingExercise(true);
     setEditForm({
@@ -494,8 +548,10 @@ const CalendarPage: React.FC = () => {
       unit: 'kg',
       isBodyweight: false,
       note: '',
-      sets: [{ weight: 0, reps: 0 }]
+      sets: [{ weight: 0, reps: 10 }]
     });
+    setIsExerciseSelectorOpen(true);
+    setIsManualExerciseInput(false);
     loadUniqueNames();
   };
 
@@ -540,22 +596,9 @@ const CalendarPage: React.FC = () => {
     loadUniqueNames();
   };
 
-  const addSet = () => {
-    setEditForm({
-      ...editForm,
-      sets: [...editForm.sets, { weight: 0, reps: 0 }]
-    });
-  };
-
   const removeSet = (index: number) => {
     const updated = [...editForm.sets];
     updated.splice(index, 1);
-    setEditForm({ ...editForm, sets: updated });
-  };
-
-  const handleSetChange = (index: number, field: keyof WorkoutSet, value: number) => {
-    const updated = [...editForm.sets];
-    updated[index] = { ...updated[index], [field]: value };
     setEditForm({ ...editForm, sets: updated });
   };
 
@@ -693,17 +736,74 @@ const CalendarPage: React.FC = () => {
       </div>
       
       <div className="form-group">
-        <label>種目名</label>
-        <input 
-          type="text" 
-          list="exercise-options"
-          value={editForm.name} 
-          onChange={e => setEditForm({ ...editForm, name: e.target.value })}
-          placeholder={editForm.isCardio ? "例: ランニング、エアロバイク" : "例: ベンチプレス"}
-        />
-        <datalist id="exercise-options">
-          {uniqueNames.map(name => <option key={name} value={name} />)}
-        </datalist>
+        <div className="section-title-row">
+          <label>種目名</label>
+          <button
+            type="button"
+            className="text-link-btn"
+            onClick={() => {
+              if (isManualExerciseInput) {
+                setIsManualExerciseInput(false);
+                setIsExerciseSelectorOpen(true);
+              } else {
+                setIsManualExerciseInput(true);
+              }
+            }}
+          >
+            {isManualExerciseInput ? '📋 7カテゴリーから選ぶ' : '✏️ キーボード手入力'}
+          </button>
+        </div>
+
+        {!isManualExerciseInput && editForm.name ? (
+          <div className="selected-exercise-card" onClick={() => setIsExerciseSelectorOpen(true)}>
+            <div className="selected-ex-main">
+              <span className="selected-ex-name">{editForm.name}</span>
+              <div className="selected-ex-tags">
+                {editForm.isCardio ? (
+                  <span className="compact-chip cardio">🏃 有酸素運動</span>
+                ) : (
+                  <>
+                    {editForm.ppl && (
+                      <span className="compact-chip ppl" style={{ color: PPL_COLORS[editForm.ppl] }}>
+                        {editForm.ppl}
+                      </span>
+                    )}
+                    {editForm.bodyPart && (
+                      <span className="compact-chip bp" style={{ color: BODY_PART_COLORS[editForm.bodyPart] }}>
+                        {editForm.bodyPart}
+                      </span>
+                    )}
+                    {editForm.isBodyweight && <span className="compact-chip bw">自重</span>}
+                  </>
+                )}
+              </div>
+            </div>
+            <button type="button" className="change-ex-btn">種目を変更</button>
+          </div>
+        ) : !isManualExerciseInput ? (
+          <button
+            type="button"
+            className="choose-exercise-trigger-btn"
+            onClick={() => setIsExerciseSelectorOpen(true)}
+          >
+            <span className="btn-text">📋 7カテゴリーから種目を選択</span>
+            <ChevronRight size={18} />
+          </button>
+        ) : (
+          <>
+            <input 
+              type="text" 
+              list="exercise-options"
+              value={editForm.name} 
+              onChange={e => setEditForm({ ...editForm, name: e.target.value })}
+              placeholder={editForm.isCardio ? "例: ランニング、エアロバイク" : "例: ベンチプレス"}
+              autoFocus
+            />
+            <datalist id="exercise-options">
+              {uniqueNames.map(name => <option key={name} value={name} />)}
+            </datalist>
+          </>
+        )}
       </div>
 
       <div className="form-group">
@@ -804,22 +904,29 @@ const CalendarPage: React.FC = () => {
           </div>
 
           <div className="form-group">
-            <label>セット内容</label>
+            <div className="section-title-row">
+              <label>セット内容</label>
+              <span className="section-hint-text">タップしてスクロール選択</span>
+            </div>
             {editForm.sets.map((set, i) => (
               <div key={i} className="edit-set-row">
                 <span className="set-label">{i + 1}</span>
-                <input 
-                  type="number" 
-                  value={set.weight !== undefined && set.weight !== null ? set.weight || '' : ''} 
-                  onChange={e => handleSetChange(i, 'weight', parseFloat(e.target.value) || 0)}
-                  placeholder={editForm.isBodyweight ? (editForm.unit === 'lbs' ? '+lbs' : '+kg') : (editForm.unit === 'lbs' ? 'lbs' : 'kg')}
-                />
-                <input 
-                  type="number" 
-                  value={set.reps || ''} 
-                  onChange={e => handleSetChange(i, 'reps', parseInt(e.target.value) || 0)}
-                  placeholder="回数"
-                />
+                <div 
+                  className="set-picker-tap-card"
+                  onClick={() => setPickerSetIndex(i)}
+                  title="タップしてドラムロールで重量・回数を変更"
+                >
+                  <div className="set-picker-tap-val">
+                    <span className="tap-weight">
+                      {editForm.isBodyweight ? `自重 + ${set.weight || 0}` : (set.weight || 0)}
+                      <small>{editForm.unit || 'kg'}</small>
+                    </span>
+                    <span className="tap-times">×</span>
+                    <span className="tap-reps">{set.reps || 0}<small>reps</small></span>
+                  </div>
+                  <span className="set-picker-tap-hint">スクロール選択 ▾</span>
+                </div>
+
                 {!editForm.isBodyweight && set.weight && set.reps && editForm.bodyPart ? (
                   (() => {
                     const oneRM = calculate1RM(set.weight, set.reps, editForm.bodyPart);
@@ -851,7 +958,19 @@ const CalendarPage: React.FC = () => {
                 </div>
               </div>
             ))}
-            <button className="add-set-btn" onClick={addSet}>
+            <button 
+              type="button" 
+              className="add-set-btn" 
+              onClick={() => {
+                const lastSet = editForm.sets[editForm.sets.length - 1];
+                const newSets = [...editForm.sets, { 
+                  weight: lastSet ? lastSet.weight : 0, 
+                  reps: lastSet ? lastSet.reps : 10 
+                }];
+                setEditForm({ ...editForm, sets: newSets });
+                setPickerSetIndex(newSets.length - 1);
+              }}
+            >
               <Plus size={14} /> セットを追加
             </button>
           </div>
@@ -1629,6 +1748,34 @@ const CalendarPage: React.FC = () => {
             </div>
           </div>
         </div>
+      )}
+
+      {/* 7カテゴリー種目セレクターモーダル */}
+      <ExerciseSelectorModal
+        isOpen={isExerciseSelectorOpen}
+        onClose={() => setIsExerciseSelectorOpen(false)}
+        onSelect={handleSelectExerciseFromDictionary}
+        onManualInput={() => {
+          setIsManualExerciseInput(true);
+        }}
+        initialCategory={
+          editForm.isCardio ? '有酸素運動' : (editForm.bodyPart || '胸')
+        }
+      />
+
+      {/* ドラムロール式 重量・回数スクロールピッカーモーダル */}
+      {pickerSetIndex !== null && editForm.sets[pickerSetIndex] && (
+        <SetPickerModal
+          isOpen={pickerSetIndex !== null}
+          onClose={() => setPickerSetIndex(null)}
+          initialWeight={editForm.sets[pickerSetIndex].weight || 0}
+          initialReps={editForm.sets[pickerSetIndex].reps || 10}
+          initialUnit={editForm.unit || 'kg'}
+          isBodyweight={editForm.isBodyweight}
+          setIndex={pickerSetIndex}
+          totalSets={editForm.sets.length}
+          onSave={handleSaveSetFromPicker}
+        />
       )}
     </div>
   );

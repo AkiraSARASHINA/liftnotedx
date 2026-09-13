@@ -1,0 +1,87 @@
+.wheel-picker-wrapper {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  flex: 1;
+  min-width: 0;
+  user-select: none;
+}
+
+.wheel-picker-label {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text-secondary);
+  margin-bottom: 6px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.wheel-picker-container {
+  position: relative;
+  width: 100%;
+  overflow: hidden;
+  mask-image: linear-gradient(
+    to bottom,
+    transparent 0%,
+    rgba(0, 0, 0, 0.4) 15%,
+    black 35%,
+    black 65%,
+    rgba(0, 0, 0, 0.4) 85%,
+    transparent 100%
+  );
+  -webkit-mask-image: linear-gradient(
+    to bottom,
+    transparent 0%,
+    rgba(0, 0, 0, 0.4) 15%,
+    black 35%,
+    black 65%,
+    rgba(0, 0, 0, 0.4) 85%,
+    transparent 100%
+  );
+}
+
+.wheel-picker-highlight {
+  position: absolute;
+  left: 0;
+  right: 0;
+  background: rgba(0, 163, 255, 0.12);
+  border-top: 1px solid rgba(0, 163, 255, 0.35);
+  border-bottom: 1px solid rgba(0, 163, 255, 0.35);
+  border-radius: 8px;
+  pointer-events: none;
+  z-index: 1;
+}
+
+.wheel-picker-scroll {
+  height: 100%;
+  overflow-y: scroll;
+  scroll-snap-type: y mandatory;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none; /* Firefox */
+  -ms-overflow-style: none; /* IE/Edge */
+}
+
+.wheel-picker-scroll::-webkit-scrollbar {
+  display: none; /* Chrome, Safari */
+}
+
+.wheel-picker-item {
+  scroll-snap-align: center;
+  text-align: center;
+  font-size: 17px;
+  font-weight: 600;
+  color: #6e6e73;
+  cursor: pointer;
+  transition: color 0.15s ease, font-size 0.15s ease, font-weight 0.15s ease;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  padding: 0 4px;
+}
+
+.wheel-picker-item.selected {
+  color: var(--text-primary);
+  font-size: 21px;
+  font-weight: 800;
+  color: #00a3ff;
+}
