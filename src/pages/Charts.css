@@ -914,13 +914,15 @@
 }
 
 .monthly-detail-modal .kpi-label {
-  font-size: 10.5px;
+  font-size: 10px;
   font-weight: 600;
   color: var(--text-secondary);
-  white-space: nowrap;
   letter-spacing: -0.3px;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  line-height: 1.2;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 24px;
 }
 
 .monthly-detail-modal .kpi-val-row {

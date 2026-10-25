@@ -9,7 +9,9 @@ import {
   CloudOff, 
   RefreshCw, 
   AlertTriangle,
-  Check
+  Check,
+  Sparkles,
+  Save
 } from 'lucide-react';
 import { 
   linkGoogleDrive, 
@@ -22,6 +24,7 @@ import {
   hasClientId,
   uploadLocalDataToCloud
 } from '../lib/googleDriveSync';
+import { getCustomPromptRules, saveCustomPromptRules, addCustomPromptRulesListener } from '../lib/customPromptRules';
 import './Settings.css';
 
 const SettingsPage: React.FC = () => {
@@ -29,12 +32,29 @@ const SettingsPage: React.FC = () => {
   const [summaryFontSize, setSummaryFontSize] = useState<'small' | 'medium' | 'large'>('small');
   const [calendarRingMode, setCalendarRingMode] = useState<'ppl' | 'bodypart' | 'none'>('ppl');
   
+  // Custom prompt rules state
+  const [customRules, setCustomRules] = useState<string>(() => getCustomPromptRules());
+  const [rulesSaveStatus, setRulesSaveStatus] = useState<string | null>(null);
+
   // Sync state
   const [syncStatus, setSyncStatus] = useState<string>('unlinked');
   const [syncMessage, setSyncMessage] = useState<string>('');
   const [autoUpload, setAutoUpload] = useState<boolean>(true);
   const [lastSync, setLastSync] = useState<string | null>(null);
   const [hasConfiguredClient, setHasConfiguredClient] = useState<boolean>(true);
+
+  useEffect(() => {
+    const unsubscribe = addCustomPromptRulesListener((rules) => {
+      setCustomRules(rules);
+    });
+    return unsubscribe;
+  }, []);
+
+  const handleSaveCustomRules = () => {
+    saveCustomPromptRules(customRules);
+    setRulesSaveStatus('保存しました（クラウド同期）');
+    setTimeout(() => setRulesSaveStatus(null), 3000);
+  };
 
   useEffect(() => {
     const stored = localStorage.getItem('settings_highlight_pb');
@@ -106,17 +126,16 @@ const SettingsPage: React.FC = () => {
       '■ 復元時の動作:\n' +
       '・同じ日付の記録がある場合: クラウド側のデータで上書きされます\n' +
       '・この端末にしかない別の日付の記録: そのまま残ります（消えません）\n' +
-      '・クラウド側にある新しい日付の記録: この端末に追加されます\n\n' +
+      '・クラウド側にある新しい日付の記録: この端末に追加されます\n' +
+      '・AIプロンプトの独自追加ルール: クラウド側の設定に更新・復元されます\n\n' +
       '復元を実行してもよろしいですか？'
     );
     if (!confirm1) return;
 
     try {
       const count = await restoreDataFromCloud();
-      if (count > 0) {
-        alert(`${count}件の記録を復元しました。最新のデータを反映するため、アプリを再起動（リロード）します。`);
-        window.location.reload();
-      }
+      alert(`${count}件の記録とAIプロンプト独自追加ルールを復元しました。最新のデータを反映するため、アプリを再起動（リロード）します。`);
+      window.location.reload();
     } catch (e: any) {
       alert(`復元に失敗しました: ${e.message}`);
     }
@@ -277,6 +296,43 @@ const SettingsPage: React.FC = () => {
                   {opt.label}
                 </button>
               ))}
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* AI Prompt Custom Rules Section */}
+      <section className="settings-section card">
+        <div className="section-header">
+          <Sparkles size={20} />
+          <h3>AIプロンプト独自追加ルール</h3>
+        </div>
+        
+        <div className="settings-group">
+          <div className="setting-item custom-rules-setting-item">
+            <div className="setting-info">
+              <span className="setting-title">独自ルール（任意）</span>
+              <span className="setting-desc">
+                ノート画像読み取りAIプロンプトの末尾に自動合体される独自ルールです。通っているジムのマシン名やあなた独自の略称・メモ解釈などを自由に設定できます。
+              </span>
+            </div>
+            <textarea
+              className="settings-custom-rules-textarea"
+              rows={4}
+              placeholder="例:&#10;- ○○ジムの「インクライン」はマシンインクラインチェストプレスとする&#10;- 「ナロー」と書かれた種目はequipmentに「ナロー」と記載する&#10;- アタッチメント「A」はマググリップとする"
+              value={customRules}
+              onChange={e => setCustomRules(e.target.value)}
+            />
+            <div className="settings-rules-actions">
+              <button
+                type="button"
+                className="btn-sync-action link"
+                onClick={handleSaveCustomRules}
+              >
+                <Save size={16} />
+                独自ルールを保存
+              </button>
+              {rulesSaveStatus && <span className="rules-save-toast animate-in">✓ {rulesSaveStatus}</span>}
             </div>
           </div>
         </div>

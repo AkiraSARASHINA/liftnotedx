@@ -139,6 +139,14 @@
   gap: 8px;
 }
 
+.prompt-modal-copy-btn {
+  margin-bottom: 16px;
+}
+
+.prompt-box pre:last-child {
+  margin-bottom: 0;
+}
+
 /* File Upload Select Info styling */
 .selected-file-container {
   margin-top: 12px;
@@ -193,5 +201,104 @@
   gap: 8px;
   padding: 10px;
   font-size: 14px;
+}
+
+/* 独自追加ルールセクション（モーダル内） */
+.custom-rules-box {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  padding: 14px;
+  margin-bottom: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.custom-rules-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.custom-rules-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.rules-save-toast {
+  font-size: 11px;
+  font-weight: 600;
+  color: #34c759;
+  background: rgba(52, 199, 89, 0.15);
+  border: 1px solid rgba(52, 199, 89, 0.3);
+  padding: 2px 8px;
+  border-radius: 12px;
+}
+
+.custom-rules-desc {
+  font-size: 11.5px;
+  color: var(--text-secondary);
+  line-height: 1.4;
+  margin: 0;
+}
+
+.custom-rules-textarea {
+  width: 100%;
+  box-sizing: border-box;
+  background: #000000;
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  color: var(--text-primary);
+  padding: 10px;
+  font-size: 12.5px;
+  line-height: 1.5;
+  resize: vertical;
+  font-family: inherit;
+  transition: border-color 0.2s;
+}
+
+.custom-rules-textarea:focus {
+  outline: none;
+  border-color: var(--primary-color);
+}
+
+.custom-rules-footer {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.btn-save-rules {
+  background: rgba(0, 163, 255, 0.12);
+  color: var(--primary-color);
+  border: 1px solid rgba(0, 163, 255, 0.35);
+  padding: 6px 12px;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  transition: all 0.2s ease;
+}
+
+.btn-save-rules:hover {
+  background: rgba(0, 163, 255, 0.22);
+  border-color: var(--primary-color);
+}
+
+.prompt-box-header {
+  margin-bottom: 8px;
+}
+
+.prompt-preview-title {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
 }
 

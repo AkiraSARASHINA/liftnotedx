@@ -141,6 +141,7 @@ interface MonthlySummaryData {
   totalSets: number;
   totalReps: number;
   totalVolume: number;
+  totalCalories: number;
   pplData: { name: string; value: number }[];
   bodyPartData: { name: string; value: number }[];
   pplLegendData: { name: string; value: number }[];
@@ -264,13 +265,14 @@ const ChartsPage: React.FC = () => {
       const year = parseInt(yearStr, 10);
       const month = parseInt(monthStr, 10);
 
-      // 総セット数、総レップ数、総ボリューム
+      // 総セット数、総レップ数、総ボリューム、有酸素の総カロリー
       let totalSets = 0;
       let totalReps = 0;
       let totalVolume = 0;
+      let totalCalories = 0;
 
       // PPL・5分割集計（レップ数基準）
-      // 実施日数（筋トレのみを主日数、有酸素含む総日数も算出）
+      // 実施日数（有酸素運動を含む総日数）
       const strengthDaysCount = new Set(workouts.filter(w => w.exercises.some(e => !e.isCardio)).map(w => w.date)).size;
       const allDaysCount = new Set(workouts.map(w => w.date)).size;
 
@@ -302,6 +304,7 @@ const ChartsPage: React.FC = () => {
           if (ex.isCardio) {
             // 有酸素運動の集計
             const cal = ex.calories || 0;
+            totalCalories += cal;
             if (!exMap[ex.name]) {
               exMap[ex.name] = {
                 name: ex.name,
@@ -552,12 +555,13 @@ const ChartsPage: React.FC = () => {
         monthKey: mKey,
         year,
         month,
-        trainingDays: strengthDaysCount,
+        trainingDays: allDaysCount,
         strengthDaysCount,
         allDaysCount,
         totalSets,
         totalReps,
         totalVolume,
+        totalCalories,
         pplData,
         bodyPartData,
         pplLegendData,
@@ -1186,9 +1190,6 @@ const ChartsPage: React.FC = () => {
               <span className="month-huge">{m.month}月</span>
               <div className="month-days-container">
                 <span className="month-days-badge">{m.trainingDays}日実施</span>
-                {m.allDaysCount > m.trainingDays && (
-                  <span className="month-cardio-days-sub">（有酸素含む: {m.allDaysCount}日）</span>
-                )}
               </div>
             </div>
 
@@ -1202,8 +1203,8 @@ const ChartsPage: React.FC = () => {
                 <span className="m-metric-val">{m.totalSets} <small>sets</small></span>
               </div>
               <div className="m-metric-item">
-                <span className="m-metric-lbl">総ボリューム</span>
-                <span className="m-metric-val">{m.totalVolume.toLocaleString()} <small>kg</small></span>
+                <span className="m-metric-lbl">消費カロリー（有酸素）</span>
+                <span className="m-metric-val">{m.totalCalories.toLocaleString()} <small>kcal</small></span>
               </div>
             </div>
 
@@ -1267,9 +1268,6 @@ const ChartsPage: React.FC = () => {
                 <span className="kpi-value">{m.trainingDays}</span>
                 <span className="kpi-unit">日</span>
               </div>
-              {m.allDaysCount > m.trainingDays && (
-                <span className="kpi-cardio-sub">（有酸素含む: {m.allDaysCount}日）</span>
-              )}
             </div>
             <div className="summary-kpi-card">
               <span className="kpi-label">レップ数</span>
@@ -1286,10 +1284,10 @@ const ChartsPage: React.FC = () => {
               </div>
             </div>
             <div className="summary-kpi-card">
-              <span className="kpi-label">ボリューム</span>
+              <span className="kpi-label">消費カロリー<br />（有酸素）</span>
               <div className="kpi-val-row">
-                <span className="kpi-value">{m.totalVolume.toLocaleString()}</span>
-                <span className="kpi-unit">kg</span>
+                <span className="kpi-value">{m.totalCalories.toLocaleString()}</span>
+                <span className="kpi-unit">kcal</span>
               </div>
             </div>
           </div>

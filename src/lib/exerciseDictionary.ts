@@ -1,4 +1,4 @@
-import type { BodyPartCategory, PPLCategory } from './db';
+import type { BodyPartCategory, PPLCategory, Workout } from './db';
 
 export type ExerciseCategory = BodyPartCategory | '有酸素運動';
 
@@ -8,6 +8,7 @@ export interface ExerciseDefinition {
   ppl: PPLCategory;
   isCardio?: boolean;
   isBodyweight?: boolean;
+  isFromHistory?: boolean;
 }
 
 /**
@@ -173,4 +174,98 @@ export const getExercisesByCategory = (category: ExerciseCategory): ExerciseDefi
  */
 export const findExerciseDefinition = (name: string): ExerciseDefinition | undefined => {
   return EXERCISE_DICTIONARY.find(ex => ex.name.toLowerCase() === name.toLowerCase());
+};
+
+/**
+ * 過去のワークアウト記録とデフォルト辞書を統合し、
+ * 最新のPPL・部位・設定を反映した統合種目リストを生成する
+ */
+export const buildUnifiedExerciseList = (workouts: Workout[] = []): ExerciseDefinition[] => {
+  // 1. ワークアウトを日付昇順（古い日付から新しい日付へ）でソート
+  const sortedWorkouts = [...workouts].sort((a, b) => a.date.localeCompare(b.date));
+
+  // 2. 種目ごとに最新の情報を抽出（キー: 小文字・トリム）
+  const historyMap = new Map<string, {
+    name: string;
+    category: ExerciseCategory;
+    ppl: PPLCategory;
+    isCardio?: boolean;
+    isBodyweight?: boolean;
+  }>();
+
+  for (const workout of sortedWorkouts) {
+    if (!workout.exercises || !Array.isArray(workout.exercises)) continue;
+    for (const ex of workout.exercises) {
+      const trimmedName = ex.name?.trim();
+      if (!trimmedName) continue;
+
+      const key = trimmedName.toLowerCase();
+      
+      // カテゴリーの判定
+      let category: ExerciseCategory = 'それ以外';
+      if (ex.isCardio) {
+        category = '有酸素運動';
+      } else if (ex.bodyPart && (EXERCISE_CATEGORIES as string[]).includes(ex.bodyPart)) {
+        category = ex.bodyPart as ExerciseCategory;
+      }
+
+      // PPLの判定
+      const validPpl: PPLCategory[] = ['プッシュ', 'プル', 'レッグ', 'それ以外'];
+      const ppl: PPLCategory = (ex.ppl && validPpl.includes(ex.ppl)) ? ex.ppl : 'それ以外';
+
+      // 日付昇順で走査しているため、最新の日付で上書きされる
+      historyMap.set(key, {
+        name: trimmedName,
+        category,
+        ppl,
+        isCardio: !!ex.isCardio,
+        isBodyweight: !!ex.isBodyweight
+      });
+    }
+  }
+
+  // 3. デフォルト辞書とマージ
+  const unifiedList: ExerciseDefinition[] = [];
+  const processedKeys = new Set<string>();
+
+  // (A) デフォルト辞書を走査
+  for (const dictEx of EXERCISE_DICTIONARY) {
+    const key = dictEx.name.toLowerCase();
+    processedKeys.add(key);
+
+    const historyItem = historyMap.get(key);
+    if (historyItem) {
+      // 過去記録が存在する場合：過去の最新情報で上書きし、isFromHistory: true を付与
+      unifiedList.push({
+        name: historyItem.name,
+        category: historyItem.category,
+        ppl: historyItem.ppl,
+        isCardio: historyItem.isCardio,
+        isBodyweight: historyItem.isBodyweight,
+        isFromHistory: true
+      });
+    } else {
+      // 過去記録がない場合：デフォルト辞書のまま
+      unifiedList.push({
+        ...dictEx,
+        isFromHistory: false
+      });
+    }
+  }
+
+  // (B) デフォルト辞書になく、過去記録にのみ存在するカスタム種目を追加
+  for (const [key, historyItem] of historyMap.entries()) {
+    if (!processedKeys.has(key)) {
+      unifiedList.push({
+        name: historyItem.name,
+        category: historyItem.category,
+        ppl: historyItem.ppl,
+        isCardio: historyItem.isCardio,
+        isBodyweight: historyItem.isBodyweight,
+        isFromHistory: true
+      });
+    }
+  }
+
+  return unifiedList;
 };

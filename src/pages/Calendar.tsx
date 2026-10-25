@@ -663,6 +663,7 @@ const CalendarPage: React.FC = () => {
       const dStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
       const workout = workoutObjectMap[dStr];
       const hasWorkout = !!workout;
+      const hasCardio = !!workout?.exercises?.some(e => e.isCardio);
       const ringGradient = getDayRingGradient(workout, calendarRingMode);
       const isSelected = dStr === selectedDateStr;
       const isFuture = dStr > todayStr;
@@ -671,7 +672,7 @@ const CalendarPage: React.FC = () => {
       days.push(
         <div 
           key={dStr} 
-          className={`calendar-day ${hasWorkout ? 'has-workout' : ''} ${ringGradient ? 'has-ring' : ''} ${isSelected ? 'selected' : ''} ${isFuture ? 'future' : ''} ${isToday ? 'today' : ''}`}
+          className={`calendar-day ${hasWorkout ? 'has-workout' : ''} ${hasCardio ? 'has-cardio' : ''} ${ringGradient ? 'has-ring' : ''} ${isSelected ? 'selected' : ''} ${isFuture ? 'future' : ''} ${isToday ? 'today' : ''}`}
           onClick={() => !isFuture && handleDateClick(dStr)}
         >
           {ringGradient ? (
@@ -684,10 +685,7 @@ const CalendarPage: React.FC = () => {
               </div>
             </div>
           ) : (
-            <>
-              <span className="day-number">{d}</span>
-              {hasWorkout && <div className="dot"></div>}
-            </>
+            <span className="day-number">{d}</span>
           )}
         </div>
       );
@@ -1761,6 +1759,7 @@ const CalendarPage: React.FC = () => {
         initialCategory={
           editForm.isCardio ? '有酸素運動' : (editForm.bodyPart || '胸')
         }
+        workouts={allWorkouts}
       />
 
       {/* ドラムロール式 重量・回数スクロールピッカーモーダル */}

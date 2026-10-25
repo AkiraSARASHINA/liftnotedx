@@ -88,6 +88,8 @@
   position: relative;
   background: transparent;
   transition: all 0.2s ease;
+  border: 1.5px solid transparent;
+  box-sizing: border-box;
 }
 
 .calendar-day:hover:not(.future) {
@@ -99,22 +101,30 @@
   font-weight: 500;
 }
 
-.calendar-day.has-workout:not(.has-ring) {
+/* 有酸素運動をした日：青い枠 */
+.calendar-day.has-cardio {
   background: rgba(0, 163, 255, 0.12);
+  border-color: rgba(0, 163, 255, 0.45);
   color: var(--primary-color);
   font-weight: 700;
 }
 
-.calendar-day.has-ring {
+.calendar-day.has-cardio .day-number {
+  color: var(--primary-color);
+}
+
+/* 円グラフのある日：有酸素がない場合は背景・ボーダーを透明にする */
+.calendar-day.has-ring:not(.has-cardio) {
   background: transparent !important;
+  border-color: transparent !important;
 }
 
 /* Day Donut Ring */
 .day-ring {
-  width: 40px;
-  height: 40px;
-  max-width: 95%;
-  max-height: 95%;
+  width: 38px;
+  height: 38px;
+  max-width: 90%;
+  max-height: 90%;
   aspect-ratio: 1;
   border-radius: 50%;
   display: flex;

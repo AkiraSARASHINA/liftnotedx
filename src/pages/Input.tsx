@@ -1,9 +1,23 @@
-import { useState, useRef } from 'react';
-import { saveWorkout, getWorkoutByDate, getAllWorkouts, type Workout } from '../lib/db';
-import { ClipboardCheck, Save, AlertCircle, Copy, HelpCircle, X, Download, Upload } from 'lucide-react';
+import { useState, useRef, useEffect } from 'react';
+import { saveWorkout, getWorkoutByDate, getAllWorkouts, type Workout, type Exercise } from '../lib/db';
+import { ClipboardCheck, Save, AlertCircle, Copy, HelpCircle, X, Download, Upload, Eye } from 'lucide-react';
+import { getCustomPromptRules, saveCustomPromptRules, addCustomPromptRulesListener } from '../lib/customPromptRules';
+import { ImportPreviewModal } from '../components/ImportPreviewModal';
 import './Input.css';
 
-const AI_PROMPT = `添付されたトレーニングノートの画像から記録を読み取り、以下の【出力フォーマット】のJSON形式に変換してください。
+export const getAiPrompt = (baseDateStr?: string, customRules?: string) => {
+  const baseDate = baseDateStr ? new Date(baseDateStr) : new Date();
+  const todayStr = baseDateStr || `${baseDate.getFullYear()}-${String(baseDate.getMonth() + 1).padStart(2, '0')}-${String(baseDate.getDate()).padStart(2, '0')}`;
+  const currentYear = baseDate.getFullYear();
+  const prevYear = currentYear - 1;
+
+  const trimmedCustom = customRules?.trim();
+  const customSection = trimmedCustom ? `
+
+【ユーザー独自ルール（最優先で適用）】
+${trimmedCustom}` : '';
+
+  return `添付されたトレーニングノートの画像から記録を読み取り、以下の【出力フォーマット】のJSON形式に変換してください。
 ノートに明記されていなくても、各種目名から【PPL分類】および【5分割法部位】を自動判定して付与してください。
 複数日の記録がある場合は、それらを配列に含めて出力してください。
 
@@ -28,6 +42,11 @@ const AI_PROMPT = `添付されたトレーニングノートの画像から記�
     ]
   }
 ]
+
+【日付（date）の特定・補完ルール】
+- "date" は必ず "YYYY-MM-DD" 形式で出力してください。
+- ノート内に「年」が書かれておらず「月日」のみの場合など、日付情報が足りない場合は、2020年などの古い年を勝手に補完せず、本日（基準日: ${todayStr}）を前提として矛盾しない【当日を含む最も近い過去の日付】（未来の日付にならない直近の過去）を自動補完してください。
+  （例: 基準日が10月25日の場合、「10/12」は ${currentYear}-10-12、「11/5」は ${prevYear}-11-05 と判定）
 
 【自動分類ルール（種目から自動判定）】
 1. PPL分類（pplプロパティ）:
@@ -70,8 +89,64 @@ const AI_PROMPT = `添付されたトレーニングノートの画像から記�
    - ランニング、トレッドミル、エアロバイク、バイク、クロストレーナー、ステッパー等の有酸素運動が記録されている場合は "isCardio": true としてください。
    - 消費カロリー（例: 300kcal, 250cal 等）が記載されている場合は "calories": 300 のように数値で記載してください。
    - 有酸素運動の場合は "sets": [] とし、ppl, bodyPart, isBodyweight, unit の指定は不要です（マシン名があれば equipment に記載）。
+${customSection}
 
 出力はマークダウンのコードブロック（\`\`\`json ... \`\`\`）のみを出力してください。`;
+};
+
+export const AI_PROMPT = getAiPrompt();
+
+export const normalizeWorkoutData = (data: any): { workouts: Workout[]; customRules?: string } => {
+  if (!data) return { workouts: [] };
+
+  let workoutsArray: any[] = [];
+  let customRules: string | undefined = undefined;
+
+  if (Array.isArray(data)) {
+    workoutsArray = data;
+  } else if (typeof data === 'object' && data !== null) {
+    if (Array.isArray(data.workouts)) {
+      workoutsArray = data.workouts;
+      if (typeof data.customPromptRules === 'string') {
+        customRules = data.customPromptRules;
+      }
+    } else if (data.date && Array.isArray(data.exercises)) {
+      workoutsArray = [data];
+    }
+  }
+
+  const normalized: Workout[] = workoutsArray.map(w => {
+    const date = typeof w.date === 'string' ? w.date : new Date().toISOString().split('T')[0];
+    const exercises: Exercise[] = Array.isArray(w.exercises)
+      ? w.exercises.map((e: any) => ({
+          name: typeof e.name === 'string' ? e.name : '',
+          isCardio: !!e.isCardio,
+          calories: typeof e.calories === 'number' ? e.calories : undefined,
+          isBodyweight: !!e.isBodyweight,
+          equipment: typeof e.equipment === 'string' ? e.equipment : '',
+          note: typeof e.note === 'string' ? e.note : '',
+          ppl: e.ppl || undefined,
+          bodyPart: e.bodyPart || undefined,
+          unit: e.unit === 'lbs' ? 'lbs' : 'kg',
+          sets: Array.isArray(e.sets)
+            ? e.sets.map((s: any) => ({
+                weight: typeof s.weight === 'number' ? s.weight : undefined,
+                reps: typeof s.reps === 'number' ? s.reps : 10,
+                unit: s.unit || e.unit || 'kg'
+              }))
+            : []
+        }))
+      : [];
+
+    return {
+      date,
+      exercises,
+      updatedAt: w.updatedAt || new Date().toISOString()
+    };
+  });
+
+  return { workouts: normalized, customRules };
+};
 
 const InputPage: React.FC = () => {
   const [jsonInput, setJsonInput] = useState('');
@@ -80,6 +155,32 @@ const InputPage: React.FC = () => {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [importedData, setImportedData] = useState<any | null>(null);
+  const [customRules, setCustomRules] = useState<string>(() => getCustomPromptRules());
+  const [rulesSaveStatus, setRulesSaveStatus] = useState<string | null>(null);
+
+  // 登録前確認・編集モーダル用のステート
+  const [previewModalData, setPreviewModalData] = useState<{
+    workouts: Workout[];
+    customPromptRules?: string;
+    sourceType: 'json_paste' | 'file_import';
+  } | null>(null);
+
+  useEffect(() => {
+    const unsubscribe = addCustomPromptRulesListener((rules) => {
+      setCustomRules(rules);
+    });
+    return unsubscribe;
+  }, []);
+
+  const handleSaveCustomRules = () => {
+    saveCustomPromptRules(customRules);
+    setRulesSaveStatus('保存しました（クラウド同期）');
+    setTimeout(() => setRulesSaveStatus(null), 3000);
+  };
+
+  const today = new Date();
+  const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+  const currentPrompt = getAiPrompt(todayStr, customRules);
 
   const processWorkouts = async (data: any) => {
     const workouts = Array.isArray(data) ? data : [data];
@@ -89,7 +190,7 @@ const InputPage: React.FC = () => {
       if (!workout.date || !workout.exercises || !Array.isArray(workout.exercises)) continue;
       
       const validExercises = workout.exercises.filter(
-        (ex: any) => ex && ex.name && Array.isArray(ex.sets) && ex.sets.length > 0
+        (ex: any) => ex && ex.name && ((Array.isArray(ex.sets) && ex.sets.length > 0) || ex.isCardio)
       );
       if (validExercises.length === 0) continue;
 
@@ -114,19 +215,70 @@ const InputPage: React.FC = () => {
     return count;
   };
 
-  const handleSave = async () => {
+  // JSON貼り付けから確認画面を開く
+  const handleOpenPreviewFromJson = () => {
+    if (!jsonInput.trim()) {
+      setStatus({ type: 'error', message: 'JSONデータを入力してください。' });
+      return;
+    }
     try {
       const data = JSON.parse(jsonInput);
-      const count = await processWorkouts(data);
-      setStatus({ type: 'success', message: `${count}件の記録を保存しました（既存の記録には追記されました）。` });
-      setJsonInput('');
+      const { workouts, customRules: parsedRules } = normalizeWorkoutData(data);
+      if (workouts.length === 0) {
+        setStatus({ type: 'error', message: '有効なトレーニング記録データが見つかりませんでした。形式を確認してください。' });
+        return;
+      }
+      setStatus(null);
+      setPreviewModalData({
+        workouts,
+        customPromptRules: parsedRules,
+        sourceType: 'json_paste'
+      });
     } catch (e) {
-      setStatus({ type: 'error', message: '保存に失敗しました。JSONの形式を確認してください。' });
+      setStatus({ type: 'error', message: 'JSONの解析に失敗しました。形式（括弧閉じやカンマ等）を確認してください。' });
     }
   };
 
+  // ファイルインポートから確認画面を開く
+  const handleOpenPreviewFromFile = () => {
+    if (!importedData) return;
+    const { workouts, customRules: parsedRules } = normalizeWorkoutData(importedData);
+    if (workouts.length === 0) {
+      setStatus({ type: 'error', message: 'ファイル内に有効なトレーニング記録が見つかりませんでした。' });
+      return;
+    }
+    setStatus(null);
+    setPreviewModalData({
+      workouts,
+      customPromptRules: parsedRules,
+      sourceType: 'file_import'
+    });
+  };
+
+  // 確認画面で「確定して保存」が押された際の処理
+  const handleConfirmImport = async (confirmedWorkouts: Workout[], rulesToSave?: string) => {
+    if (rulesToSave !== undefined && rulesToSave.trim() !== '') {
+      saveCustomPromptRules(rulesToSave);
+    }
+    const count = await processWorkouts(confirmedWorkouts);
+    const dateCount = confirmedWorkouts.length;
+    setStatus({ 
+      type: 'success', 
+      message: `${dateCount}日分（計${count}日）の記録を保存しました（既存の記録には追記されました）。` 
+    });
+
+    if (previewModalData?.sourceType === 'json_paste') {
+      setJsonInput('');
+    } else {
+      setSelectedFile(null);
+      setImportedData(null);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
+    setPreviewModalData(null);
+  };
+
   const copyPrompt = () => {
-    navigator.clipboard.writeText(AI_PROMPT);
+    navigator.clipboard.writeText(currentPrompt);
     alert('プロンプトをコピーしました！AIに貼り付けて使用してください。');
   };
 
@@ -134,7 +286,12 @@ const InputPage: React.FC = () => {
 
   const handleExportFile = async () => {
     const all = await getAllWorkouts();
-    const blob = new Blob([JSON.stringify(all, null, 2)], { type: 'application/json' });
+    const backupObj = {
+      workouts: all,
+      customPromptRules: getCustomPromptRules(),
+      exportedAt: new Date().toISOString()
+    };
+    const blob = new Blob([JSON.stringify(backupObj, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     const date = new Date().toISOString().split('T')[0].replace(/-/g, '');
@@ -162,19 +319,6 @@ const InputPage: React.FC = () => {
       }
     };
     reader.readAsText(file);
-  };
-
-  const handleImportExecute = async () => {
-    if (!importedData) return;
-    try {
-      const count = await processWorkouts(importedData);
-      setStatus({ type: 'success', message: `ファイルから${count}件の記録をインポートしました。` });
-      setSelectedFile(null);
-      setImportedData(null);
-      if (fileInputRef.current) fileInputRef.current.value = '';
-    } catch (err) {
-      setStatus({ type: 'error', message: 'インポートに失敗しました。データを確認してください。' });
-    }
   };
 
   return (
@@ -206,9 +350,9 @@ const InputPage: React.FC = () => {
         </div>
       )}
 
-      <button className="btn-primary save-btn" onClick={handleSave}>
-        <Save size={20} />
-        記録を保存
+      <button className="btn-primary save-btn" onClick={handleOpenPreviewFromJson}>
+        <Eye size={20} />
+        内容を確認・編集して保存
       </button>
 
       <div className="backup-section card">
@@ -255,16 +399,28 @@ const InputPage: React.FC = () => {
                 </div>
                 <button 
                   className="btn-primary import-exec-btn" 
-                  onClick={handleImportExecute}
+                  onClick={handleOpenPreviewFromFile}
                   disabled={!importedData}
                 >
-                  インポートを実行
+                  <Eye size={16} />
+                  内容を確認・編集して復元
                 </button>
               </div>
             )}
           </div>
         </div>
       </div>
+
+      {/* 登録前確認・編集モーダル */}
+      {previewModalData && (
+        <ImportPreviewModal
+          initialWorkouts={previewModalData.workouts}
+          customPromptRules={previewModalData.customPromptRules}
+          sourceType={previewModalData.sourceType}
+          onConfirm={handleConfirmImport}
+          onClose={() => setPreviewModalData(null)}
+        />
+      )}
 
       {showPromptModal && (
         <div className="modal-overlay" onClick={() => setShowPromptModal(false)}>
@@ -278,12 +434,44 @@ const InputPage: React.FC = () => {
             <p className="modal-description">
               以下のプロンプトをコピーして、トレーニングノートの写真と一緒にAIに送ってください。
             </p>
+            <button className="btn-primary copy-btn prompt-modal-copy-btn" onClick={copyPrompt}>
+              <Copy size={18} />
+              プロンプトをコピーする
+            </button>
+
+            {/* 独自追加ルールセクション */}
+            <div className="custom-rules-box">
+              <div className="custom-rules-header">
+                <span className="custom-rules-title">📝 独自追加ルール（任意）</span>
+                {rulesSaveStatus && <span className="rules-save-toast animate-in">✓ {rulesSaveStatus}</span>}
+              </div>
+              <p className="custom-rules-desc">
+                通っているジム固有のマシン名やあなた独自のメモの解釈ルールを記述できます。自動で下のプロンプトに合体され、クラウド同期されます。
+              </p>
+              <textarea
+                className="custom-rules-textarea"
+                rows={3}
+                placeholder="例:&#10;- ○○ジムの「インクライン」はマシンインクラインチェストプレスとする&#10;- 「ナロー」と書かれた種目はequipmentに「ナロー」と記載する&#10;- アタッチメント「A」はマググリップとする"
+                value={customRules}
+                onChange={e => setCustomRules(e.target.value)}
+              />
+              <div className="custom-rules-footer">
+                <button
+                  type="button"
+                  className="btn-save-rules"
+                  onClick={handleSaveCustomRules}
+                >
+                  <Save size={14} />
+                  独自ルールを保存
+                </button>
+              </div>
+            </div>
+
             <div className="prompt-box">
-              <pre>{AI_PROMPT}</pre>
-              <button className="btn-primary copy-btn" onClick={copyPrompt}>
-                <Copy size={18} />
-                プロンプトをコピーする
-              </button>
+              <div className="prompt-box-header">
+                <span className="prompt-preview-title">プレビュー（完成プロンプト）</span>
+              </div>
+              <pre>{currentPrompt}</pre>
             </div>
           </div>
         </div>

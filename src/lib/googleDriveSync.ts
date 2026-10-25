@@ -5,9 +5,11 @@ const CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID || '';
 const SCOPES = 'https://www.googleapis.com/auth/drive.appdata';
 const BACKUP_FILE_NAME = 'liftnote_dx_backup.json';
 
-interface SyncData {
+export interface SyncData {
   workouts: Workout[];
   updatedAt: string;
+  customPromptRules?: string;
+  customPromptRulesUpdatedAt?: string;
 }
 
 let tokenClient: any = null;
@@ -358,9 +360,17 @@ export const getLocalSyncData = async (): Promise<SyncData> => {
     }
   });
 
+  const customPromptRules = localStorage.getItem('custom_prompt_rules') || '';
+  const customPromptRulesUpdatedAt = localStorage.getItem('custom_prompt_rules_updated_at') || '';
+  if (customPromptRulesUpdatedAt && customPromptRulesUpdatedAt > latestTime) {
+    latestTime = customPromptRulesUpdatedAt;
+  }
+
   return {
     workouts,
-    updatedAt: latestTime
+    updatedAt: latestTime,
+    customPromptRules,
+    customPromptRulesUpdatedAt
   };
 };
 
@@ -417,10 +427,19 @@ export const restoreDataFromCloud = async (): Promise<number> => {
       await saveWorkout(workout);
       count++;
     }
+
+    // Restore custom prompt rules if present in cloud data
+    if (cloudData.customPromptRules !== undefined) {
+      localStorage.setItem('custom_prompt_rules', cloudData.customPromptRules);
+      if (cloudData.customPromptRulesUpdatedAt) {
+        localStorage.setItem('custom_prompt_rules_updated_at', cloudData.customPromptRulesUpdatedAt);
+      }
+      window.dispatchEvent(new CustomEvent('custom_prompt_rules_updated', { detail: cloudData.customPromptRules }));
+    }
     
     localStorage.setItem('gdrive_last_sync', new Date().toISOString());
     localStorage.removeItem('gdrive_unsynced');
-    setSyncStatus('linked', `クラウドから${count}件の記録を復元しました。`);
+    setSyncStatus('linked', `クラウドから${count}件の記録とAIプロンプト独自追加ルールを復元しました。`);
     return count;
   } catch (err: any) {
     if (err.name === 'AbortError') {
